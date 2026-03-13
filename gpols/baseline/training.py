@@ -17,7 +17,7 @@ SEED = 42
 model_name = "almanach/camembertv2-base"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-dataset = load_dataset("csv", data_files="./data/dataset-camembert.csv")
+dataset = load_dataset("csv", data_files={"train": "./data/dataset-camembert.csv"}, split="train")
 
 def tokenize(batch):
     return tokenizer(
@@ -26,7 +26,7 @@ def tokenize(batch):
         max_length=512,
     )
 
-dataset = dataset.map(tokenize, batched=True, remove_columns=dataset.column_names)
+dataset = dataset.map(tokenize, batched=True)
 dataset = dataset.train_test_split(test_size=0.1)
 
 data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=True, seed=SEED)
