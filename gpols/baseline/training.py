@@ -53,7 +53,7 @@ data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=True, seed=SEED)
 model = AutoModelForMaskedLM.from_pretrained(model_name, dtype="auto")
 
 args = TrainingArguments(
-    output_dir="camembertav2-finetuned",
+    output_dir="build/checkpoints",
     # training and duration
     num_train_epochs=3,
     per_device_train_batch_size=8,

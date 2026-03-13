@@ -1,3 +1,5 @@
 optuna
 datasets
 transformers
+accelerate
+scikit-learn
