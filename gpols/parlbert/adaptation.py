@@ -1,5 +1,5 @@
 """
-Script to fine-tune CamembertV2 on our motions ("amendements") and speechs
+Script to adapt CamembertV2 on our motions ("amendements") and speechs. Sort of continuous pre-training (with fine-tuning hyper-params) so CamembertV2 can modelise parlementary texts.
 
 Cf. https://huggingface.co/docs/transformers/training?training-args=training+duration
 """
@@ -53,7 +53,7 @@ data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=True, seed=SEED)
 model = AutoModelForMaskedLM.from_pretrained(model_name, dtype="auto")
 
 args = TrainingArguments(
-    output_dir="build/checkpoints",
+    output_dir="camembertav2-finetuned",
     # training and duration
     num_train_epochs=3,
     per_device_train_batch_size=8,
