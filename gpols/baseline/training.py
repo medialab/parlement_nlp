@@ -11,6 +11,8 @@ from transformers import (
     TrainingArguments,
     Trainer
 )
+import numpy as np
+import evaluate
 
 SEED = 42
 
@@ -19,12 +21,29 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 dataset = load_dataset("csv", data_files={"train": "./data/dataset-camembert.csv"}, split="train")
 
+accuracy = evaluate.load("accuracy")
+perplexity = evaluate.load("perplexity")
+
 def tokenize(batch):
     return tokenizer(
         batch["text"],
         truncation=True,
         max_length=512,
     )
+
+# Cf. https://huggingface.co/docs/evaluate/transformers_integrations#trainer
+def compute_metrics(eval_pred):
+    logits, labels = eval_pred
+    predictions = np.argmax(logits, axis=-1)
+
+    mask = labels != -100
+    filtered_preds = predictions[mask]
+    filtered_labels = predictions[mask]
+    acc = accuracy.compute(predictions=filtered_preds, references=filtered_labels)
+
+    return {
+        "accuracy": acc["accuracy"],
+    }
 
 dataset = dataset.map(tokenize, batched=True)
 dataset = dataset.train_test_split(test_size=0.1)
@@ -63,7 +82,8 @@ trainer = Trainer(
     train_dataset=dataset["train"],
     eval_dataset=dataset["test"],
     processing_class=tokenizer,
-    data_collator=data_collator
+    data_collator=data_collator,
+    compute_metrics=compute_metrics
 )
 
 trainer.train()
