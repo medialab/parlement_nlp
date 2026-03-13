@@ -83,7 +83,6 @@ trainer = Trainer(
     eval_dataset=dataset["test"],
     processing_class=tokenizer,
     data_collator=data_collator,
-    compute_metrics=compute_metrics
 )
 
 trainer.train()
