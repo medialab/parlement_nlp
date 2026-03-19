@@ -16,6 +16,8 @@ from urllib.parse import urlencode
 
 SEED = 42
 
+# Hyperparameter Optimization with Optuna and Transformers
+# Cf. https://huggingface.co/learn/cookbook/optuna_hpo_with_transformers
 def main():
     parser = argparse.ArgumentParser(description='BERT adaptation script')
     parser.add_argument('--dataset', type=str, required=True, help='Path to BERT training dataset')
