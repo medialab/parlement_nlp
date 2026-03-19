@@ -38,15 +38,19 @@ def main():
             truncation=True,
             max_length=512,
         )
+    
+    def preprocess_logits_for_metrics(logits, labels):
+        if isinstance(logits, tuple):
+            logits = logits[0]
+        return logits.argmax(dim=-1)
 
     # Cf. https://huggingface.co/docs/evaluate/transformers_integrations#trainer
     def compute_metrics(eval_pred):
-        logits, labels = eval_pred
-        predictions = np.argmax(logits, axis=-1)
+        predictions, labels = eval_pred
 
         mask = labels != -100
         filtered_preds = predictions[mask]
-        filtered_labels = predictions[mask]
+        filtered_labels = labels[mask]
         return accuracy.compute(predictions=filtered_preds, references=filtered_labels)
     
     def compute_objectives(metrics):
@@ -80,6 +84,7 @@ def main():
         # save
         save_strategy="steps",
         save_steps=500,
+        eval_accumulation_steps=10
     )
 
     trainer = Trainer(
@@ -89,7 +94,8 @@ def main():
         eval_dataset=dataset["test"],
         processing_class=tokenizer,
         data_collator=data_collator,
-        compute_metrics=compute_metrics
+        compute_metrics=compute_metrics,
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     )
 
     def optuna_hp_space(trial):
