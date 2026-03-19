@@ -1,3 +1,4 @@
+# data
 casanova
 pandas
 ebbe
@@ -5,3 +6,11 @@ beautifulsoup4
 thefuzz
 tqdm
 stanza
+
+# parlbert
+transformers
+datasets
+accelerate
+optuna
+numpy
+evaluate
