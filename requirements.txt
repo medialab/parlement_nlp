@@ -1,0 +1,6 @@
+casanova
+pandas
+ebbe
+beautifulsoup4
+thefuzz
+tqdm
