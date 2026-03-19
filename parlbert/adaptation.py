@@ -55,7 +55,8 @@ def main():
 
     data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=True, seed=SEED)
 
-    model = AutoModelForMaskedLM.from_pretrained(model_name, dtype="auto")
+    def model_init():
+        return AutoModelForMaskedLM.from_pretrained(model_name, dtype="auto")
 
     args = TrainingArguments(
         output_dir="output",
@@ -80,7 +81,7 @@ def main():
     )
 
     trainer = Trainer(
-        model=model,
+        model_init=model_init,
         args=args,
         train_dataset=dataset["train"],
         eval_dataset=dataset["test"],
