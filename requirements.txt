@@ -4,3 +4,4 @@ ebbe
 beautifulsoup4
 thefuzz
 tqdm
+stanza
