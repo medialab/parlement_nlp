@@ -80,9 +80,9 @@ def is_appel_amendement(interv, amendment = None):
     return True
 
 def get_start_debate(row, date, amendment):
-    interventions = row[12]
-    function = row[10]
-    debate_date = row[2]
+    interventions = row[13]
+    function = row[11]
+    debate_date = row[3]
 
     if date != debate_date:
         return None
@@ -110,10 +110,10 @@ def is_amendement_adoption(interv, amendment = None):
     return False
 
 def get_end_debate(row, date, amendment):
-    interventions = row[12]
-    function = row[10]
-    debate_date = row[2]
-    code = row[11]
+    interventions = row[13]
+    function = row[11]
+    debate_date = row[3]
+    code = row[12]
 
     if date != debate_date:
         return None
@@ -133,8 +133,24 @@ def get_end_debate(row, date, amendment):
         
     return None
 
+def get_group(row, scrutin_id):
+    name, group, last_group, _ = row[7], row[9], row[10], row[11]
+
+    if not group:
+        vote = votes.from_group(scrutin_id, last_group)
+        if vote: return last_group
+        else:
+            for g in GROUPS_GOVERNMENT.get(name, MAJORITY_GROUPS):
+                vote = votes.from_group(scrutin_id, g)
+                if vote: return g
+            for g in MAJORITY_GROUPS:
+                vote = votes.from_group(scrutin_id, g)
+                if vote: return g
+    
+    return group
+
 def get_vote(row, scrutin_id):
-    name, group, last_group, function = row[6], row[8], row[9], row[10]
+    name, group, last_group, function = row[7], row[9], row[10], row[11]
 
     if function == "président": return None
     vote = votes.from_name(scrutin_id, name)
@@ -168,7 +184,7 @@ def get_segment(rows, meta_amendment):
 
         if result_start:
             vote = get_vote(start_row, vote_id)
-
+            start_row[9] = get_group(start_row, vote_id)
             results.append([vote] + start_row)
 
             j = i + 1
@@ -176,20 +192,21 @@ def get_segment(rows, meta_amendment):
                 roll_row = rows[j]
                 result_end = get_end_debate(roll_row, date, amendement)
 
-                if is_appel_amendement(roll_row[12].lower()):
+                if is_appel_amendement(roll_row[13].lower()):
                     has_drawer = True
 
-                if is_rappel_reglement(roll_row[12]):
+                if is_rappel_reglement(roll_row[13]):
                     has_rappel_reglement = True
 
                 vote = get_vote(roll_row, vote_id)
+                roll_row[9] = get_group(roll_row, vote_id)
 
                 results.append([vote] + roll_row)
                 
                 if result_end:
                     return has_drawer, has_rappel_reglement, results, "ok"
                 else:
-                    if is_amendement_adoption(roll_row[12].lower()):
+                    if is_amendement_adoption(roll_row[13].lower()):
                         has_drawer = True
                     j += 1
     
@@ -205,9 +222,9 @@ def reduce_legis(meta):
     sub = []
     sections = []
     for row in legis:
-        if date != row[2]: continue
+        if date != row[3]: continue
         
-        sections.append(row[4])
+        sections.append(row[5])
 
         sub.append(row)
     
@@ -216,7 +233,7 @@ def reduce_legis(meta):
 
     good_section = fuzz_choice(dossier, sections)
 
-    filtered = [row for row in sub if row[4] == good_section]
+    filtered = [row for row in sub if row[5] == good_section]
 
     return (filtered, "ok") if filtered else (filtered, "no segment related to vote")
 
@@ -240,7 +257,7 @@ with casanova.writer(OUTPUT_CSV, [
         
         if not sub:
             writer.writerow(
-                [vote_id, amendment, author_name, author_group, amendment_content, amendment_summary, None, False, False, log, None] + [""] * 13
+                [vote_id, amendment, author_name, author_group, amendment_content, amendment_summary, None, False, False, log, None] + [""] * 14
             )
             continue
 
@@ -248,7 +265,7 @@ with casanova.writer(OUTPUT_CSV, [
 
         if not segment:
             writer.writerow(
-                [vote_id, amendment, author_name, author_group, amendment_content, amendment_summary, drawer, rappel, False, log, None] + [""] * 13
+                [vote_id, amendment, author_name, author_group, amendment_content, amendment_summary, drawer, rappel, False, log, None] + [""] * 14
             )
 
         for row in segment:

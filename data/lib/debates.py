@@ -2,7 +2,6 @@ import glob
 import re
 import bs4
 import tqdm
-import json
 import stanza
 import casanova
 
@@ -88,6 +87,7 @@ NEGATIVE_KEY_WORDS = {
 }
 
 HEADERS = [
+    "intervention_id",
     "debate_number",
     "debate_ref",
     "date",
@@ -103,12 +103,15 @@ HEADERS = [
     "intervention"
 ]
 
+LEGIS_NUM = re.compile(r'([0-9]{2})th')
+
 class DebateBuilder:
     def __init__(self, dir, output_path, quick=False, format="csv"):
         self.quick = quick or format == "csv"
 
         print("Loading actors...")
         self.acteurs = Actors()
+        self.legis_num = LEGIS_NUM.search(dir).group(1)
 
         if not self.quick:
             self.nlp = stanza.Pipeline('fr')
@@ -117,11 +120,16 @@ class DebateBuilder:
 
         print("Treating debates...")
         paths = glob.glob(join(dir, "*.xml"))
+        
+        i = 0
         for path in tqdm.tqdm(paths, total=len(paths)):
             content = Path(path).read_text()
             soup = bs4.BeautifulSoup(content, "xml")
             _, intervs_list = self._get_intervs(soup)
-            writer.writerows(intervs_list)
+
+            for row in intervs_list:
+                writer.writerow([str(f"{self.legis_num}-{i}")] + list(row))
+                i += 1
 
         writer.close()
 

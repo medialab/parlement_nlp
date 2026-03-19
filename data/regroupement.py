@@ -173,7 +173,7 @@ def to_json(rows):
     parole = None
     temp = None
     for i, row in enumerate(rows):
-        vote_instance, amendment, author_name, author_group, amendment_content, amendment_summary, _, _, _, _, vote_issue, _, debate_ref, date, moment, subject, sub_subject, name, sexe, group, _, function, code, intervention = row
+        vote_instance, amendment, author_name, author_group, amendment_content, amendment_summary, _, _, _, _, vote_issue, intervention_id, _, debate_ref, date, moment, subject, sub_subject, name, sexe, group, _, function, code, intervention = row
 
         root["vote_id"] = vote_instance
         root["amendment"] = amendment
@@ -214,7 +214,8 @@ def to_json(rows):
 
             
             temp["speech"].append({
-                "content": intervention,
+                "speech_id": intervention_id,
+                "speech": intervention,
                 "reactions": []
             })
 
@@ -265,6 +266,7 @@ def to_json(rows):
                     "function": function,
                 },
                 "vote": vote_issue,
+                "speech_id": intervention_id,
                 "speech": intervention
             })
         
@@ -295,7 +297,8 @@ def to_json(rows):
                 parole = name
             
             temp["speech"].append({
-                "content": intervention,
+                "speech_id": intervention_id,
+                "speech": intervention,
                 "reactions": []
             })
 

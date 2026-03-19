@@ -11,14 +11,16 @@ DEBATS_JSON = args.input
 OUTPUT_PATH = args.output
 
 HEADERS = [
+    "speech_id",
     "debate_id",
     "amendment_author_name",
     "amendment_author_group",
     "amendment_content",
     "amendment_summary",
+    "speech_date",
     "speaker_name",
     "speaker_group",
-    "speaker_gouvernment",
+    "speaker_government",
     "label",
     "speech"
 ]
@@ -29,6 +31,7 @@ with open(DEBATS_JSON) as source:
 with casanova.writer(OUTPUT_PATH, HEADERS) as writer:
     for debat in data:
         debate_id = debat["vote_id"]
+        speech_date = debat["date"]
         amendment_author_name = debat["author_name"]
         amendment_author_group = debat["author_group"]
         amendment_content = debat["content"]
@@ -50,15 +53,18 @@ with casanova.writer(OUTPUT_PATH, HEADERS) as writer:
             label = tour["vote"]
             if not label: continue
 
-            speech = ' '.join([parole["content"] for parole in tour["speech"]])
+            speech = ' '.join([parole["speech"] for parole in tour["speech"]])
+            speech_id = tour["speech"][0]["speech_id"]
            
 
             writer.writerow([
+                speech_id,
                 debate_id,
                 amendment_author_name,
                 amendment_author_group,
                 amendment_content,
                 amendment_summary,
+                speech_date,
                 speaker_name,
                 speaker_party,
                 speaker_gouv,
