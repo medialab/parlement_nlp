@@ -51,7 +51,10 @@ with casanova.writer(OUTPUT_PATH, HEADERS) as writer:
                 speaker_party = "GOUV"
 
             label = tour["vote"]
+            
+            # On skip les abstention et l'absence de vote
             if not label: continue
+            if label == "ABSTENTION": continue
 
             speech = ' '.join([parole["speech"] for parole in tour["speech"]])
             speech_id = tour["speech"][0]["speech_id"]
