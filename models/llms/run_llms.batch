@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# Launch SLURM parameters
+
+#SBATCH --cpus-per-gpu=16        # Number of cpus per GPU card (>1 if multi-threaded tasks)
+#SBATCH --partition=almanach   # Name of the partition Number and type of GPU cards and type allocated
+#SBATCH --account=almanach
+#SBATCH --gres=gpu:1 
+#SBATCH --mem=1024G                # Total memory allocated
+#SBATCH --time=48:00:00 # total run time limit (HH:MM:SS)
+#SBATCH --output=%x_%j.out       # output file name
+#SBATCH --mem=0  # Request all available memory on the node
+#SBATCH --job-name=eval-qwen_pourcontre # create a short name for your job
+#SBATCH --hint=multithread       # we get physical cores not logical
+
+#SBATCH --error=%x_%j.err    # error file name
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=celia.nouri@inria.fr
+
+
+echo "### Running $SLURM_JOB_NAME ###"
+
+set -x
+
+export SLURM_TMPDIR=$(pwd)
+export src=$(pwd)
+
+
+export WANDB_NAME=eval--$(date +%D)--$(hostname)--${RANDOM}
+export WANDB_ENTITY='celia-nouri'
+export WANDB_PROJECT='hatespeech-class'
+
+
+module purge
+module load cuda/12.5
+
+
+cd $SLURM_TMPDIR
+cd $src 
+
+# Set your conda environment
+source /home/$USER/.bashrc
+# conda environment should be created previously
+conda activate fb-pa
+
+# install compatible PyTorch + vLLM
+#conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+#pip install --upgrade vllm
+
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+echo $PYTORCH_CUDA_ALLOC_CONF
+
+export VLLM_TORCH_COMPILE=0
+export TORCH_COMPILE_DISABLE=1
+
+cd $SLURM_TMPDIR 
+
+echo "starting the evaluation..."
+
+
+python llm_inf.py \
+  --num-gpu 1 \
+  --model-name Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4 \
+  --output_path ../data/eval_testset_qwen.csv \
+  --data_path ../data/export/test_dataset.csv \
+  --prompt_file llms/prompts/prompt_pour_contre_petits.txt \
+  --batch-size 2
+
+#  --output_path eval_interro_llama_guide.csv \
+#  --data_path  data/testset_all_data.csv data/interro1_Manon_tous.csv \ data/error_analysis_testset_fake.csv \ data/testset_all_data.csv = sep is ; + not same length as test 
+#  --prompt_file models/prompts/prompt_guide_context.txt meta-llama/Llama-3.2-3B-Instruct

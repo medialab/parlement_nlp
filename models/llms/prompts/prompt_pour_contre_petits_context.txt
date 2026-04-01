@@ -1,0 +1,15 @@
+Tâche : Déterminer si le député est POUR ou CONTRE l'amendement à partir de son intervention.
+
+Amendement : {amendment_summary}
+Député : {speaker_name} ({speaker_group})
+Intervention : "{speech}"
+
+Instructions :
+1. Lis l'intervention
+2. Cherche les marqueurs : "je soutiens", "je vote pour", "je m'oppose", "je vote contre"
+3. Analyse le ton : positif = POUR, négatif = CONTRE
+
+Réponds au format :
+Position: [POUR/CONTRE]
+Confiance: [haute/moyenne/basse]
+Raison: [1 phrase]

@@ -1,0 +1,13 @@
+Tâche : Déterminer si le député est POUR ou CONTRE l'amendement à partir de son intervention.
+
+Amendement : "{amendment_summary}"
+Intervention : "{speech}"
+
+Instructions :
+1. Lis l'intervention et l'amendement
+2. Determine si l'intervention est POUR ou CONTRE l'amendement
+
+Réponds au format :
+Position: [POUR/CONTRE]
+Confiance: [haute/moyenne/basse]
+Raison: [1 phrase]
