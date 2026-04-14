@@ -1,11 +1,20 @@
 import argparse
 import os
+import re
+from dotenv import load_dotenv
+
+load_dotenv()
+
+OPEN_API_KEY = os.getenv('OPENAI_SP_KEY')
+
+print(OPEN_API_KEY)
+
 os.environ["VLLM_USE_FLEX_ATTENTION"] = "0"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 # Use your API key from environment variable for security
-os.environ["OPENAI_API_KEY"] = 'Add your OpenAI API key here'
+os.environ["OPENAI_API_KEY"] = OPEN_API_KEY
 
-from openai import OpenAI
+from openai import OpenAI, BadRequestError, AuthenticationError
 import pandas as pd
 from tqdm import tqdm
 from transformers import AutoConfig
@@ -33,7 +42,7 @@ LIMITS = {
 }
 
 def truncate(text, key):
-    limit = LIMITS.get(key, 150)
+    limit = LIMITS.get(key, 200)
     if not isinstance(text, str):
         text = ""
     if len(str(text)) <= limit :
@@ -42,7 +51,7 @@ def truncate(text, key):
 
 
 def truncate_middle(text, key):
-    limit = LIMITS.get(key, 150)
+    limit = LIMITS.get(key, 200)
     text = text if isinstance(text, str) else ""
     if len(text) <= limit:
         return text
@@ -68,7 +77,7 @@ def classify_batch(prompts, llm, sampling_params):
     outputs = llm.generate(truncated_prompts, sampling_params)
     return [out.outputs[0].text.strip() for out in outputs]
 
-def classify_batch_openai(client, prompts, model_name, temperature=0.0, max_tokens=5):
+def classify_batch_openai(client, prompts, model_name, temperature=0.0, max_tokens=800):
     responses = []
     for prompt in prompts:
         # Truncate long prompts if needed (OpenAI models support up to ~128k for gpt-4o)
@@ -77,16 +86,41 @@ def classify_batch_openai(client, prompts, model_name, temperature=0.0, max_toke
             prompt = prompt[:120000]
 
         # Create chat completion
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": "You are a helpful text classification assistant."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        responses.append(response.choices[0].message.content.strip())
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": "You are a helpful text classification assistant."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=temperature,
+                max_completion_tokens=max_tokens,
+            )
+
+            # Guard against None content
+            content = response.choices[0].message.content
+            if content is None:
+                print(f"[WARN] Empty response. Finish reason: {response.choices[0].finish_reason}")
+                return ""
+        
+            print(f"DEBUG: Prompt: {prompt}")
+            print(f"DEBUG: Received response: {content}")
+            # Add this diagnostic block
+            print("Finish reason:", response.choices[0].finish_reason)
+            print("Content:", repr(response.choices[0].message.content))
+            print("Usage:", response.usage)
+            responses.append(content)
+
+        except BadRequestError as e:
+            print(f"[ERROR] Bad request: {e}")
+            return ""
+        except AuthenticationError:
+            print("[ERROR] Invalid API key")
+            return ""
+        except Exception as e:
+            print(f"[ERROR] Unexpected error: {e}")
+            return ""
+
     return responses
 
 
@@ -109,13 +143,13 @@ def run_inference(df, model_name, llm, sampling_params, prompt_file, batch_size=
         batch_speech = df["speech"].iloc[i:i+batch_size].tolist()
         if "context" in prompt_file:
             batch_amendment = df["amendment_summary"].iloc[i:i+batch_size].tolist()
-            #batch_amendment_content = df["amendment_content"].iloc[i:i+batch_size].tolist() // amendment_content=truncate(ac, "amendment_content")
+            #batch_amendment_content = df["amendment_content"].iloc[i:i+batch_size].tolist() #// amendment_content=truncate(ac, "amendment_content")
             batch_speaker_name = df["speaker_name"].iloc[i:i+batch_size].tolist()
             batch_speaker_group = df["speaker_group"].iloc[i:i+batch_size].tolist()
 
             batch_prompts = [
-                PROMPT_TEMPLATE.format(speech=truncate(s, "speech"), speaker_name=truncate(sn, "speaker_name"), speaker_group=truncate(sg, "speaker_group"), amendment_summary=truncate(a, "amendment_summary")) 
-                for s, sn, sg, a, ac in zip(batch_speech, batch_speaker_name, batch_speaker_group, batch_amendment, batch_amendment_content)
+                PROMPT_TEMPLATE.format(speech=truncate_middle(s, "speech"), speaker_name=truncate(sn, "speaker_name"), speaker_group=truncate(sg, "speaker_group"), amendment_summary=truncate_middle(a, "amendment_summary")) 
+                for s, sn, sg, a in zip(batch_speech, batch_speaker_name, batch_speaker_group, batch_amendment)
             ]
         elif "amend" in prompt_file:
             batch_amendment = df["amendment_summary"].iloc[i:i+batch_size].tolist()
@@ -134,6 +168,47 @@ def run_inference(df, model_name, llm, sampling_params, prompt_file, batch_size=
         print(f"PREDS: {preds}")
         results.extend(preds)
     return results
+
+def parse_classification_response(response_text: str) -> dict:
+    """Parse the model output into structured fields."""
+    result = {
+        "position_label": None,  # 0 = CONTRE, 1 = POUR
+        "position_raw": None,
+        "confiance": None,
+        "raison": None,
+        "parse_error": False
+    }
+    
+    if not response_text or not response_text.strip():
+        result["parse_error"] = True
+        return result
+    
+
+    # Extract Position
+    position_match = re.search(r"Position\s*:\s*(POUR|CONTRE)", response_text, re.IGNORECASE)
+    if position_match:
+        pos = position_match.group(1).upper()
+        result["position_raw"] = pos
+        if pos == "POUR":
+            result["position_label"] = 1
+        elif pos == "CONTRE":   
+            result["position_label"] = 0
+        else:   
+            result["position_label"] = -1 
+    else:
+        result["parse_error"] = True
+
+    # Extract Confiance
+    confiance_match = re.search(r"Confiance\s*:\s*(haute|moyenne|basse)", response_text, re.IGNORECASE)
+    if confiance_match:
+        result["confiance"] = confiance_match.group(1).lower()
+
+    # Extract Raison (captures everything after "Raison :")
+    raison_match = re.search(r"Raison\s*:\s*(.+)", response_text, re.DOTALL)
+    if raison_match:
+        result["raison"] = raison_match.group(1).strip()
+
+    return result
 
 def normalize_label(pred: str, prompt_file: str) -> int:
     """Convert raw model output to {1,0,-1}."""
@@ -186,6 +261,14 @@ def run_llm(args):
             prompt_file=args.prompt_file,
             batch_size=args.batch_size,
         )
+        results = [parse_classification_response(pred) for pred in predictions]
+        df["predicted_label"] = [res["position_label"] for res in results]
+        df["position_raw"] = [res["position_raw"] for res in results]
+        df["confiance"] = [res["confiance"] for res in results]
+        df["raison"] = [res["raison"] for res in results]
+        df["parse_error"] = [res["parse_error"] for res in results]
+    
+
     else :
 
         # vLLM sampling parameters
@@ -214,9 +297,8 @@ def run_llm(args):
         )
 
         predictions = run_inference(df, args.model_name, llm, sampling_params, args.prompt_file, args.batch_size)
-
-    df["predicted_label"] = [normalize_label(p, args.prompt_file) for p in predictions]
-    df["llm_output"] = predictions
+        df["predicted_label"] = [normalize_label(p, args.prompt_file) for p in predictions]
+        df["llm_output"] = predictions
 
     print(df)
     # Save if needed

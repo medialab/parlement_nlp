@@ -5,11 +5,11 @@ Député : {speaker_name} ({speaker_group})
 Intervention : "{speech}"
 
 Instructions :
-1. Lis l'intervention
-2. Cherche les marqueurs : "je soutiens", "je vote pour", "je m'oppose", "je vote contre"
+1. Lis l'intervention et l'amendement
+2. Détermine si l'intervention supporte l'amendement (POUR), ou s'oppose à l'amendement (CONTRE)
 3. Analyse le ton : positif = POUR, négatif = CONTRE
 
 Réponds au format :
 Position: [POUR/CONTRE]
 Confiance: [haute/moyenne/basse]
-Raison: [1 phrase]
+Raison: [1-2 phrases]

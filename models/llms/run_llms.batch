@@ -60,10 +60,10 @@ echo "starting the evaluation..."
 
 python llm_inf.py \
   --num-gpu 1 \
-  --model-name Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4 \
-  --output_path ../data/eval_testset_qwen.csv \
-  --data_path ../data/export/test_dataset.csv \
-  --prompt_file llms/prompts/prompt_pour_contre_petits.txt \
+  --model-name openai/gpt-5.4-mini \
+  --output_path ../../data/eval_testset_gpt-5.4.csv \
+  --data_path ../../data/export/test_dataset.csv \
+  --prompt_file prompts/prompt_pour_contre_petits_context.txt \
   --batch-size 2
 
 #  --output_path eval_interro_llama_guide.csv \
