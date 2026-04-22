@@ -14,7 +14,7 @@ model = SentenceTransformer(
     device="cuda"
 )
 
-dataset = pd.read_csv("./dataset/parallele2-cosentloss.csv", dtype={"agreement": "float64"})
+dataset = pd.read_csv("./dataset/dataset.csv", dtype={"agreement": "float64"})
 dataset = dataset[["a_speech", "b_speech", "agreement"]]
 dataset = dataset.rename(columns={"agreement":"score"})
 
