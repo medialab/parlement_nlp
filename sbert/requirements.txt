@@ -3,3 +3,4 @@ sentence-transformers
 accelerate
 datasets
 scikit-learn
+peft
