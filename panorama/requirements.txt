@@ -1,5 +1,0 @@
-beautifulsoup4
-casanova
-tqdm
-ural
-html-to-markdown
