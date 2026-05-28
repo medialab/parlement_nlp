@@ -8,3 +8,4 @@ __pycache__
 ./models/llms/test_paster.py
 ./data/open_data/*
 ./data/processed/*
+./training/data/*
