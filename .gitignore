@@ -6,3 +6,5 @@ __pycache__
 ./data/open_data/*
 ./models/llms/api_keys.json
 ./models/llms/test_paster.py
+./data/open_data/*
+./data/processed/*
