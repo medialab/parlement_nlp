@@ -30,8 +30,6 @@ from datasets import Dataset
 
 import pandas as pd
 
-import datetime
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -157,16 +155,10 @@ MARGIN_LOSS_TRIPLET = 0.4
 DISTANCE_METRIC_SIAMESE = SiameseDistanceMetric.COSINE_DISTANCE
 DISTANCE_METRIC_TRIPLET = TripletDistanceMetric.COSINE
 
-cmd = datetime.datetime(2026, 5, 29, 21, 0)
-
-while datetime.datetime.now() < cmd:
-    print('waiting...', flush=True)
-    time.sleep(10)
-
 
 modules = {
     "Qwen/Qwen3-Embedding-0.6B": ["q_proj", "k_proj", "v_proj"],
-    "Lajavaness/sentence-camembert-large": ["quey", "key", "value"]
+    "Lajavaness/sentence-camembert-large": ["query", "key", "value"]
 }
 
 model_name = "Qwen/Qwen3-Embedding-0.6B"
@@ -184,16 +176,22 @@ model.add_adapter(peft_config)
 
 # ==== DATASETS ====
 
-# Loading triplet dataset
+# Loading triplet/pair dataset
 
 dataset_triplet = pd.read_csv("./data/triplets.csv", dtype={"agreement": "float64"})
 dataset_triplet = dataset_triplet[["anc_speech", "pos_speech", "neg_speech"]]
 
+dataset_pair = pd.read_csv("./data/paires.csv", dtype={"agreement": "float64"})
+dataset_pair = dataset_pair[["a_speech", "b_speech", "agreement"]]
+dataset_pair = dataset_pair.rename(columns={"agreement": "score"})
+
+# splitting
+
 train_triplet, test_triplet = train_test_split(
     dataset_triplet, test_size=0.2, random_state=SEED
 )
-train_triplet, dev_triplet = train_test_split(
-    train_triplet, test_size=0.1, random_state=SEED
+test_triplet, dev_triplet = train_test_split(
+    test_triplet, test_size=0.1, random_state=SEED
 )
 
 train_triplet, test_triplet = (
@@ -201,16 +199,10 @@ train_triplet, test_triplet = (
     Dataset.from_pandas(test_triplet, preserve_index=False),
 )
 
-# Loading pair dataset
-
-dataset_pair = pd.read_csv("./data/paires.csv", dtype={"agreement": "float64"})
-dataset_pair = dataset_pair[["a_speech", "b_speech", "agreement"]]
-dataset_pair = dataset_pair.rename(columns={"agreement": "score"})
-
 train_pair, test_pair = train_test_split(
     dataset_pair, test_size=0.2, random_state=SEED, stratify=dataset_pair["score"]
 )
-train_pair, dev_pair = train_test_split(
+test_pair, dev_pair = train_test_split(
     train_pair, test_size=0.1, random_state=SEED, stratify=train_pair["score"]
 )
 
@@ -308,6 +300,13 @@ trainer = SentenceTransformerTrainer(
     loss=losses,
     evaluator=SequentialEvaluator([evaluator_spearman, evaluator_kl]),
 )
+
+# ==== CHECKING DATALOADER ====
+
+print("len(train_pair)=", len(train_pair))
+print("len(train_triplet)=", len(train_triplet))
+print("len(train_dataloader)=", len(trainer.get_train_dataloader()))
+print("expected_total_steps=", len(trainer.get_train_dataloader()) * args.num_train_epochs)
 
 trainer.train()
 
