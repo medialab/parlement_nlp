@@ -2,9 +2,15 @@ import logging
 import csv
 import os
 import numpy as np
+import shutil
+import sys
+
+import optuna
+import torch
+from transformers import EarlyStoppingCallback, TrainerCallback
 
 from scipy.special import kl_div
-from sklearn.model_selection import train_test_split
+
 from sentence_transformers import (
     SentenceTransformer,
     SentenceTransformerTrainer,
@@ -32,6 +38,10 @@ import pandas as pd
 
 
 logger = logging.getLogger(__name__)
+
+
+KL_EPSILON = 1e-8
+KL_HARMONIC_SCALE = 1.0
 
 
 class KLDivergenceEvaluator(BaseEvaluator):
@@ -79,7 +89,7 @@ class KLDivergenceEvaluator(BaseEvaluator):
         else:
             out_txt = ""
 
-        logger.info(
+        err(
             f"KLDivergenceEvaluator: Evaluating the model on the {self.name} dataset{out_txt}:"
         )
 
@@ -97,14 +107,17 @@ class KLDivergenceEvaluator(BaseEvaluator):
         counts_0, _ = np.histogram(sim_0, bins=bins)
         counts_1, _ = np.histogram(sim_1, bins=bins)
 
-        p = counts_0 / np.sum(counts_0)
-        q = counts_1 / np.sum(counts_1)
+        # Additive smoothing prevents divisions by zero and log(0) terms in KL.
+        p = counts_0.astype(np.float64) + KL_EPSILON
+        q = counts_1.astype(np.float64) + KL_EPSILON
+        p /= np.sum(p)
+        q /= np.sum(q)
 
         kl_all = kl_div(p, q)
         kl = np.nansum(kl_all)
 
         metrics = {"kl_div_cosine": kl}
-        logger.info(f"COSINE-KL-Divergence: {kl:.4f}")
+        err(f"COSINE-KL-Divergence: {kl:.4f}")
 
         if output_path is not None and self.write_csv:
             os.makedirs(output_path, exist_ok=True)
@@ -120,9 +133,7 @@ class KLDivergenceEvaluator(BaseEvaluator):
                 if not output_file_exists:
                     writer.writerow(self.csv_headers)
 
-                writer.writerow(
-                    [epoch, steps, metrics["kl_div_cosine"]]
-                )
+                writer.writerow([epoch, steps, metrics["kl_div_cosine"]])
 
         metrics = self.prefix_name_to_metrics(metrics, self.name)
         self.store_metrics_in_model_card_data(model, metrics, epoch, steps)
@@ -147,167 +158,318 @@ class KLDivergenceEvaluator(BaseEvaluator):
         return "KL Divergence"
 
 
+QUICK = False
+RESUME = True
+
 SEED = 24
-BATCH_SIZE = 1
-GRADIENT_ACCUMULATION_STEPS = 16
-MARGIN_LOSS_SIAMESE = 0.4
-MARGIN_LOSS_TRIPLET = 0.4
+MODEL_NAME = "Qwen/Qwen3-Embedding-0.6B"
+DEVICE = "cuda"
+CHECKPOINT_ROOT_DIR = "checkpoints"
+OPTUNA_TRIALS = 20
+OPTUNA_STUDY_NAME = "sentence_transformer_optuna_multiobjective"
+OPTUNA_STORAGE = "sqlite:///optuna_study.db"
+OBJECTIVE_METRIC_SPEARMAN = "eval-spearman_spearman_cosine"
+OBJECTIVE_METRIC_KL = "eval-kl_kl_div_cosine"
+OBJECTIVE_METRIC_HARMONIC = "eval_harmonic_mean"
+EARLY_STOPPING_PATIENCE = 4
+EARLY_STOPPING_THRESHOLD = 1e-2
+EVAL_SAVE_STEPS = 500 if not QUICK else 250
+
+# Hyperparameter sets initialization for Optuna.
+HPARAM_BATCH_SIZE = 1
+HPARAM_GRADIENT_ACCUMULATION_STEPS = 8
+HPARAM_LEARNING_RATE = 3e-5
+HPARAM_NUM_EPOCHS = 4
+HPARAM_MARGIN_LOSS_SIAMESE = [0.2, 0.4, 0.6]
+HPARAM_MARGIN_LOSS_TRIPLET = [0.2, 0.4, 0.6]
+HPAREM_DATA_FILTER_PAIR = [0.0, 0.25, 0.33]
+HPAREM_DATA_FILTER_TRIPLET = [0.0, 0.25, 0.33]
+HPARAM_LORA_R = 4
+# HPARAM_LORA_ALPHA = [8, 16]
+HPARAM_LORA_DROPOUT = 0.05
+
 DISTANCE_METRIC_SIAMESE = SiameseDistanceMetric.COSINE_DISTANCE
 DISTANCE_METRIC_TRIPLET = TripletDistanceMetric.COSINE
 
 
 modules = {
     "Qwen/Qwen3-Embedding-0.6B": ["q_proj", "k_proj", "v_proj"],
-    "Lajavaness/sentence-camembert-large": ["query", "key", "value"]
+    "Lajavaness/sentence-camembert-large": ["query", "key", "value"],
 }
-
-model_name = "Qwen/Qwen3-Embedding-0.6B"
-#model_name = "Lajavaness/sentence-camembert-large"
-model = SentenceTransformer(model_name, device="cuda")
-peft_config = LoraConfig(
-    task_type=TaskType.FEATURE_EXTRACTION,
-    inference_mode=False,
-    target_modules=modules[model_name],
-    r=8,
-    lora_alpha=16,
-    lora_dropout=0.05,
-)
-model.add_adapter(peft_config)
 
 # ==== DATASETS ====
 
-# Loading triplet/pair dataset
+train_pair_df = pd.read_csv("./splits/train_paires.csv")
+train_triplet_df = pd.read_csv("./splits/train_triplets.csv")
+dev_dataset_kl = pd.read_csv("./splits/dev_kl.csv")
+dev_dataset_spearman = pd.read_csv("./splits/dev_spearman.csv")
 
-dataset_triplet = pd.read_csv("./data/triplets.csv", dtype={"agreement": "float64"})
-dataset_triplet = dataset_triplet[["anc_speech", "pos_speech", "neg_speech"]]
+pair_quick_nb = int(len(train_pair_df) * 0.1)
+triplet_quick_nb = int(len(train_triplet_df) * 0.1)
 
-dataset_pair = pd.read_csv("./data/paires.csv", dtype={"agreement": "float64"})
-dataset_pair = dataset_pair[["a_speech", "b_speech", "agreement"]]
-dataset_pair = dataset_pair.rename(columns={"agreement": "score"})
+def err(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
 
-# splitting
+def _extract_multi_objective_metrics(metrics):
+    if OBJECTIVE_METRIC_SPEARMAN in metrics and OBJECTIVE_METRIC_KL in metrics:
+        return float(metrics[OBJECTIVE_METRIC_SPEARMAN]), float(
+            metrics[OBJECTIVE_METRIC_KL]
+        )
 
-train_triplet, test_triplet = train_test_split(
-    dataset_triplet, test_size=0.2, random_state=SEED
-)
-test_triplet, dev_triplet = train_test_split(
-    test_triplet, test_size=0.1, random_state=SEED
-)
+    spearman_value = None
+    kl_value = None
 
-train_triplet, test_triplet = (
-    Dataset.from_pandas(train_triplet, preserve_index=False),
-    Dataset.from_pandas(test_triplet, preserve_index=False),
-)
+    for key, value in metrics.items():
+        key_lower = key.lower()
+        if spearman_value is None and "spearman" in key_lower:
+            spearman_value = float(value)
+        if kl_value is None and "kl" in key_lower and "div" in key_lower:
+            kl_value = float(value)
 
-train_pair, test_pair = train_test_split(
-    dataset_pair, test_size=0.2, random_state=SEED, stratify=dataset_pair["score"]
-)
-test_pair, dev_pair = train_test_split(
-    train_pair, test_size=0.1, random_state=SEED, stratify=train_pair["score"]
-)
+    if spearman_value is None or kl_value is None:
+        raise ValueError(
+            "Could not extract both Spearman and KL-divergence metrics from evaluation output: "
+            f"{metrics}"
+        )
 
-train_pair, test_pair = (
-    Dataset.from_pandas(train_pair, preserve_index=False),
-    Dataset.from_pandas(test_pair, preserve_index=False),
-)
+    return spearman_value, kl_value
 
-train_dataset = {"pair": train_pair, "triplet": train_triplet}
 
-# ==== DEV DATASETS ====
+def _compute_harmonic_objective(spearman: float, kl_divergence: float) -> float:
+    """Compute a stable trade-off score used for checkpoint selection.
 
-dev_triplet_anc, dev_triplet_pos, dev_triplet_neg = (
-    dev_triplet["anc_speech"].tolist(),
-    dev_triplet["pos_speech"].tolist(),
-    dev_triplet["neg_speech"].tolist(),
-)
+    Spearman is already bounded in [-1, 1], while KL is unbounded and can drift
+    over training. We map KL to [0, 1) with kl/(kl+scale) so harmonic mean stays
+    stable across eval steps and does not depend on previous maxima.
+    """
+    if spearman <= 0.0 or kl_divergence <= 0.0:
+        return 0.0
 
-dev_triplet = pd.DataFrame(
-    {
-        "a_speech": dev_triplet_anc * 2,
-        "b_speech": dev_triplet_pos + dev_triplet_neg,
-        "score": [1.0] * len(dev_triplet_pos) + [0.0] * len(dev_triplet_neg),
+    kl_score = kl_divergence / (kl_divergence + KL_HARMONIC_SCALE)
+    if kl_score <= 0.0:
+        return 0.0
+
+    return (2.0 * spearman * kl_score) / (spearman + kl_score)
+
+
+class DoubleObjectiveCallBack(TrainerCallback):
+    def on_train_begin(self, args, state, control, **kwargs):
+        state._best_spearman = -99
+        state._best_kl = 0.0
+        state._best_harmonic = -99
+        state._best_step = -99
+        return control
+
+    def on_evaluate(self, args, state, control, metrics, **kwargs):
+        spearman, kl = _extract_multi_objective_metrics(metrics)
+
+        harmonic_mean = _compute_harmonic_objective(spearman, kl)
+
+        err("Harmonic mean : %.2f" % harmonic_mean)
+
+        metrics[OBJECTIVE_METRIC_HARMONIC] = harmonic_mean
+
+        state._best_spearman = max(state._best_spearman, spearman)
+        state._best_kl = max(state._best_kl, kl)
+        if harmonic_mean > state._best_harmonic:
+            state._best_harmonic = harmonic_mean
+            state._best_step = state.global_step
+
+        return control
+    
+    
+
+
+def build_model(lora_r: int, lora_alpha: int, lora_dropout: float):
+    model = SentenceTransformer(MODEL_NAME, device=DEVICE)
+    peft_config = LoraConfig(
+        task_type=TaskType.FEATURE_EXTRACTION,
+        inference_mode=False,
+        target_modules=modules[MODEL_NAME],
+        r=lora_r,
+        lora_alpha=lora_alpha,
+        lora_dropout=lora_dropout,
+    )
+    model.add_adapter(peft_config)
+    return model
+
+
+def build_trainer(trial: optuna.Trial):
+    #per_device_train_batch_size = trial.suggest_categorical(
+    #    "per_device_train_batch_size", HPARAM_BATCH_SIZE
+    #)
+    #gradient_accumulation_steps = trial.suggest_categorical(
+    #    "gradient_accumulation_steps", HPARAM_GRADIENT_ACCUMULATION_STEPS
+    #)
+    #learning_rate = trial.suggest_categorical("learning_rate", HPARAM_LEARNING_RATE)
+    #num_train_epochs = trial.suggest_categorical("num_train_epochs", HPARAM_NUM_EPOCHS)
+    margin_loss_siamese = trial.suggest_categorical(
+        "margin_loss_siamese", HPARAM_MARGIN_LOSS_SIAMESE
+    )
+    margin_loss_triplet = trial.suggest_categorical(
+        "margin_loss_triplet", HPARAM_MARGIN_LOSS_TRIPLET
+    )
+    #lora_r = trial.suggest_categorical("lora_r", HPARAM_LORA_R)
+    #lora_dropout = trial.suggest_categorical("lora_dropout", HPARAM_LORA_DROPOUT)
+
+    data_filter_pair = trial.suggest_categorical(
+        "data_filter_pair", HPAREM_DATA_FILTER_PAIR
+    )
+    data_filter_triplet = trial.suggest_categorical(
+        "data_filter_triplet", HPAREM_DATA_FILTER_TRIPLET
+    )
+
+    filtered_train_pair_df = train_pair_df[
+        train_pair_df["cosine"] >= data_filter_pair
+    ]
+
+    filtered_train_triplet_df = train_triplet_df[
+        train_triplet_df["cosine"] >= data_filter_triplet
+    ]
+
+    filtered_train_pair_df = filtered_train_pair_df[["a_speech", "b_speech", "score"]]
+    filtered_train_triplet_df = filtered_train_triplet_df[
+        ["anc_speech", "pos_speech", "neg_speech"]
+    ]
+
+    if QUICK:
+        filtered_train_pair_df = filtered_train_pair_df.sample(
+            n=min(len(filtered_train_pair_df), pair_quick_nb), random_state=SEED
+        )
+        filtered_train_triplet_df = filtered_train_triplet_df.sample(
+            n=min(len(filtered_train_triplet_df), triplet_quick_nb), random_state=SEED
+        )
+
+
+    model = build_model(
+        lora_r=HPARAM_LORA_R, lora_alpha=int(HPARAM_LORA_R) * 2, lora_dropout=HPARAM_LORA_DROPOUT
+    )
+
+    train_dataset = {
+        "pair": Dataset.from_pandas(filtered_train_pair_df, preserve_index=False),
+        "triplet": Dataset.from_pandas(filtered_train_triplet_df, preserve_index=False),
     }
-)
 
-dev_dataset_kl = (
-    pd.concat([dev_pair, dev_triplet])
-    .drop_duplicates()
-    .reset_index(drop=True)
-    .sample(frac=1, random_state=SEED)
-)
-dev_dataset_spearman = pd.read_parquet(
-    "hf://datasets/CATIE-AQ/frenchSTS/data/validation-00000-of-00001.parquet"
-)
+    losses = {
+        "pair": ContrastiveLoss(
+            model,
+            margin=margin_loss_siamese,
+            distance_metric=DISTANCE_METRIC_SIAMESE,
+        ),
+        "triplet": TripletLoss(
+            model,
+            triplet_margin=margin_loss_triplet,
+            distance_metric=DISTANCE_METRIC_TRIPLET,
+        ),
+    }
+
+    total = len(filtered_train_pair_df) + len(filtered_train_triplet_df)
+    err("==== NEW TRIAL ====")
+    err("Number of items :", total)
+    err("Number of steps", (total // HPARAM_GRADIENT_ACCUMULATION_STEPS) * HPARAM_NUM_EPOCHS)
+
+    args = SentenceTransformerTrainingArguments(
+        output_dir=os.path.join(CHECKPOINT_ROOT_DIR, f"trial-{trial.number}"),
+        num_train_epochs=HPARAM_NUM_EPOCHS,
+        per_device_train_batch_size=HPARAM_BATCH_SIZE,
+        per_device_eval_batch_size=HPARAM_BATCH_SIZE,
+        learning_rate=HPARAM_LEARNING_RATE,
+        warmup_steps=0.1,
+        fp16=False,
+        bf16=False,
+        eval_strategy="steps",
+        eval_steps=EVAL_SAVE_STEPS,
+        save_strategy="steps",
+        save_steps=EVAL_SAVE_STEPS,
+        logging_steps=100,
+        metric_for_best_model=OBJECTIVE_METRIC_HARMONIC,
+        greater_is_better=True,
+        load_best_model_at_end=True,
+        use_cache=False,
+        gradient_checkpointing=True,
+        gradient_accumulation_steps=HPARAM_GRADIENT_ACCUMULATION_STEPS,
+    )
+
+    evaluator_spearman = EmbeddingSimilarityEvaluator(
+        sentences1=dev_dataset_spearman["sentence1"].tolist(),
+        sentences2=dev_dataset_spearman["sentence2"].tolist(),
+        scores=dev_dataset_spearman["score"].tolist(),
+        main_similarity=SimilarityFunction.COSINE,
+        name="eval-spearman",
+        show_progress_bar=True,
+    )
+
+    evaluator_kl = KLDivergenceEvaluator(
+        sentences1=dev_dataset_kl["a_speech"].tolist(),
+        sentences2=dev_dataset_kl["b_speech"].tolist(),
+        scores=dev_dataset_kl["score"].tolist(),
+        name="eval-kl",
+        show_progress_bar=True,
+    )
+
+    return SentenceTransformerTrainer(
+        args=args,
+        model=model,
+        train_dataset=train_dataset,
+        loss=losses,
+        evaluator=SequentialEvaluator([evaluator_spearman, evaluator_kl]),
+        callbacks=[
+            DoubleObjectiveCallBack(),
+            EarlyStoppingCallback(
+                early_stopping_patience=EARLY_STOPPING_PATIENCE,
+                early_stopping_threshold=EARLY_STOPPING_THRESHOLD,
+            ),
+        ],
+    )
 
 
-# ==== LOSSES ====
+def objective(trial):
+    trial_output_dir = os.path.join(CHECKPOINT_ROOT_DIR, f"trial-{trial.number}")
+    if os.path.isdir(trial_output_dir):
+        shutil.rmtree(trial_output_dir)
 
-losses = {
-    "pair": ContrastiveLoss(
-        model, margin=MARGIN_LOSS_SIAMESE, distance_metric=DISTANCE_METRIC_SIAMESE
-    ),
-    "triplet": TripletLoss(
-        model,
-        triplet_margin=MARGIN_LOSS_TRIPLET,
-        distance_metric=DISTANCE_METRIC_TRIPLET,
-    ),
-}
+    trainer = build_trainer(trial)
+    trainer.train()
+    metrics = trainer.evaluate()
+    spearman_value, kl_value = _extract_multi_objective_metrics(metrics)
+    trial.set_user_attr("metrics", metrics)
+    trial.set_user_attr("objective_spearman", spearman_value)
+    trial.set_user_attr("objective_kl", kl_value)
 
-# ==== TRAINING ====
+    trainer.model.save_pretrained(os.path.join(trial_output_dir, "adapter"))
 
-args = SentenceTransformerTrainingArguments(
-    output_dir="checkpoints",
-    num_train_epochs=4,
-    per_device_train_batch_size=BATCH_SIZE,
-    per_device_eval_batch_size=BATCH_SIZE,
-    learning_rate=2e-5,
-    warmup_steps=0.1,
-    fp16=False,  # Set to False if you get an error that your GPU can't run on FP16
-    bf16=False,  # Set to True if you have a GPU that supports BF16
-    eval_strategy="epoch",
-    save_strategy="steps",
-    save_steps=500,
-    logging_steps=100,
-    use_cache=False,
-    gradient_checkpointing=True,
-    gradient_accumulation_steps=GRADIENT_ACCUMULATION_STEPS,
-)
+    del trainer
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
-# ==== EVALUATORS ====
-
-evaluator_spearman = EmbeddingSimilarityEvaluator(
-    sentences1=dev_dataset_spearman["sentence1"].tolist(),
-    sentences2=dev_dataset_spearman["sentence2"].tolist(),
-    scores=dev_dataset_spearman["score"].tolist(),
-    main_similarity=SimilarityFunction.COSINE,
-    name="eval-spearman",
-    show_progress_bar=True,
-)
+    return spearman_value, kl_value
 
 
-evaluator_kl = KLDivergenceEvaluator(
-    sentences1=dev_dataset_kl["a_speech"].tolist(),
-    sentences2=dev_dataset_kl["b_speech"].tolist(),
-    scores=dev_dataset_kl["score"].tolist(),
-    name="eval-kl",
-    show_progress_bar=True,
-)
+def run_optuna_experiment():
+    os.makedirs(CHECKPOINT_ROOT_DIR, exist_ok=True)
+    optuna.logging.set_verbosity(optuna.logging.INFO)
 
-trainer = SentenceTransformerTrainer(
-    args=args,
-    model=model,
-    train_dataset=train_dataset,
-    loss=losses,
-    evaluator=SequentialEvaluator([evaluator_spearman, evaluator_kl]),
-)
+    study = optuna.create_study(
+        study_name=OPTUNA_STUDY_NAME,
+        directions=["maximize", "maximize"],
+        storage=OPTUNA_STORAGE,
+        load_if_exists=True,
+    )
+    study.optimize(objective, n_trials=OPTUNA_TRIALS)
 
-# ==== CHECKING DATALOADER ====
+    print("pareto_trials_count=", len(study.best_trials))
+    for trial in study.best_trials:
+        print(
+            "pareto_trial=",
+            trial.number,
+            "values=",
+            trial.values,
+            "params=",
+            trial.params,
+        )
 
-print("len(train_pair)=", len(train_pair))
-print("len(train_triplet)=", len(train_triplet))
-print("len(train_dataloader)=", len(trainer.get_train_dataloader()))
-print("expected_total_steps=", len(trainer.get_train_dataloader()) * args.num_train_epochs)
+    return study
 
-trainer.train()
 
-model.save_pretrained("./adapter")
+if __name__ == "__main__":
+    run_optuna_experiment()

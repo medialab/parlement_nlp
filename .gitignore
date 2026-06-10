@@ -9,3 +9,4 @@ __pycache__
 ./data/open_data/*
 ./data/processed/*
 training/data/*
+training/splits/*
