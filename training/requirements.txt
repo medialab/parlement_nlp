@@ -1,0 +1,7 @@
+sentence-transformers
+torch
+optuna
+numpy
+scipy
+peft
+accelerate
