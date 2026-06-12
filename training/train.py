@@ -194,7 +194,7 @@ def err(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def trial(params, datasets, log_callback, batch_size=BATCH_SIZE):
+def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL_SAVE_STEPS):
     # === datasets ===
     train_pair_df, train_triplet_df, dev_dataset_kl, dev_dataset_spearman = datasets
 
@@ -260,7 +260,7 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE):
 
     err("==== NEW TRIAL ====")
     err("Number of items :", total)
-    err("Number of steps", (total // BATCH_SIZE) * NUM_EPOCHS)
+    err("Number of steps", (total // batch_size) * NUM_EPOCHS)
 
     args = SentenceTransformerTrainingArguments(
         num_train_epochs=NUM_EPOCHS,
@@ -271,7 +271,7 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE):
         fp16=False,
         bf16=False,
         eval_strategy="steps",
-        eval_steps=EVAL_SAVE_STEPS,
+        eval_steps=eval_steps,
         save_strategy="no",
         logging_steps=100,
         gradient_checkpointing=False,
@@ -331,8 +331,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=32,
+        default=BATCH_SIZE,
         help="Batch size of training.",
+    )
+    parser.add_argument(
+        "--eval-steps",
+        type=int,
+        default=EVAL_SAVE_STEPS,
+        help="Eval save steps.",
     )
     cli_args = parser.parse_args()
 
@@ -368,7 +374,7 @@ if __name__ == "__main__":
             )
 
             try:
-                trial(row, datasets, callback, batch_size=cli_args.batch_size)
+                trial(row, datasets, callback, batch_size=cli_args.batch_size, eval_steps=cli_args.eval_steps)
             except Exception as e:
                 error.writerow([
                     trial_i,
