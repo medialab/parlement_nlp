@@ -1,5 +1,21 @@
 # Tranining
 
+## How to
+
+First, install the dependencies with :
+
+```bash
+$ pip install -r requirements.txt
+```
+
+Then, quick launch :
+
+```bash
+$ python train.py hyperparams.csv --batch-size 32
+```
+
+## Usage
+
 ```bash
 usage: train.py [-h] [--start-trial-index START_TRIAL_INDEX] [--batch-size BATCH_SIZE] [--eval-steps EVAL_STEPS] hyperparams
 
@@ -15,4 +31,3 @@ options:
   --eval-steps EVAL_STEPS
                         Eval save steps.
 ```
-
