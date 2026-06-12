@@ -336,7 +336,7 @@ if __name__ == "__main__":
     )
     cli_args = parser.parse_args()
 
-    iso_dt = datetime.now().replace(microsecond=0).isoformat()
+    iso_dt = datetime.now().replace(microsecond=0).isoformat().replace('T', '_').replace(':', '-')
     csv_output_path = cli_args.hyperparams.replace(".csv", "") + f"_{iso_dt}.csv"
     csv_output_error_path = cli_args.hyperparams.replace(".csv", "") + f"_{iso_dt}_error.csv"
 
