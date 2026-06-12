@@ -346,7 +346,7 @@ if __name__ == "__main__":
         casanova.writer(csv_output_error_path, TRAINING_ERROR_CSV_HEADER) as error
     ):
         for row in enricher:
-            trial_i = row[0]
+            trial_i = int(row[0])
 
             if trial_i < cli_args.start_trial_index:
                 continue
