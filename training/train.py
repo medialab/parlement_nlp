@@ -264,8 +264,8 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE):
 
     args = SentenceTransformerTrainingArguments(
         num_train_epochs=NUM_EPOCHS,
-        per_device_train_batch_size=BATCH_SIZE,
-        per_device_eval_batch_size=BATCH_SIZE,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size,
         learning_rate=lr,
         warmup_steps=0.1,
         fp16=False,
@@ -283,7 +283,7 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE):
         sentences2=dev_dataset_spearman["sentence2"].tolist(),
         scores=dev_dataset_spearman["score"].tolist(),
         main_similarity=SimilarityFunction.COSINE,
-        name="eval-spearman",
+        name="sts",
         show_progress_bar=True,
     )
 
@@ -291,7 +291,7 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE):
         sentences1=dev_dataset_kl["a_speech"].tolist(),
         sentences2=dev_dataset_kl["b_speech"].tolist(),
         scores=dev_dataset_kl["score"].tolist(),
-        name="eval-kl",
+        name="val",
         show_progress_bar=True,
     )
 
@@ -328,6 +328,12 @@ if __name__ == "__main__":
         default=0,
         help="Trial index to start from.",
     )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=32,
+        help="Batch size of training.",
+    )
     cli_args = parser.parse_args()
 
     iso_dt = datetime.now().replace(microsecond=0).isoformat()
@@ -362,7 +368,7 @@ if __name__ == "__main__":
             )
 
             try:
-                trial(row, datasets, callback)
+                trial(row, datasets, callback, batch_size=cli_args.batch_size)
             except Exception as e:
                 error.writerow([
                     trial_i,
