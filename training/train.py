@@ -331,8 +331,8 @@ if __name__ == "__main__":
     cli_args = parser.parse_args()
 
     iso_dt = datetime.now().replace(microsecond=0).isoformat()
-    csv_output_path = cli_args.hyperparams_csv.replace(".csv", "") + f"_{iso_dt}.csv"
-    csv_output_error_path = cli_args.hyperparams_csv.replace(".csv", "") + f"_{iso_dt}_error.csv"
+    csv_output_path = cli_args.hyperparams.replace(".csv", "") + f"_{iso_dt}.csv"
+    csv_output_error_path = cli_args.hyperparams.replace(".csv", "") + f"_{iso_dt}_error.csv"
 
     err("Loading datasets files...")
 
@@ -342,7 +342,7 @@ if __name__ == "__main__":
     dev_dataset_spearman = pd.read_csv("./splits/dev_spearman.csv")
 
     with (
-        casanova.enricher(cli_args.hyperparams_csv, csv_output_path, add=HPARAM_CSV_HEADER) as enricher, 
+        casanova.enricher(cli_args.hyperparams, csv_output_path, add=HPARAM_CSV_HEADER) as enricher, 
         casanova.writer(csv_output_error_path, TRAINING_ERROR_CSV_HEADER) as error
     ):
         for row in enricher:
