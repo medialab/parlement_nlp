@@ -1,7 +1,6 @@
-sentence-transformers
-torch
-optuna
+sentence-transformers==5.4.1
 numpy
 scipy
 peft
 accelerate
+torch
