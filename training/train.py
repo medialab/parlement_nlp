@@ -160,10 +160,7 @@ MODULES = {
         "q_proj",
         "k_proj",
         "v_proj",
-        "o_proj",
-        "gate_proj",
-        "up_proj",
-        "down_proj"
+        "o_proj"
     ],
     "Lajavaness/sentence-camembert-large": ["query", "key", "value"],
 }
@@ -171,7 +168,7 @@ DEVICE = "cuda"
 DISTANCE_METRIC_SIAMESE = SiameseDistanceMetric.COSINE_DISTANCE
 DISTANCE_METRIC_TRIPLET = TripletDistanceMetric.COSINE
 BATCH_SIZE = 32
-NUM_EPOCHS = 3
+NUM_EPOCHS = 2
 EVAL_SAVE_STEPS = 500
 
 TRAINING_ERROR_CSV_HEADER = [
