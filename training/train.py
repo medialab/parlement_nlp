@@ -376,6 +376,8 @@ if __name__ == "__main__":
             try:
                 trial(row, datasets, callback, batch_size=cli_args.batch_size, eval_steps=cli_args.eval_steps)
             except Exception as e:
+                err("===== ERROR - STOPPING TRIAL =====")
+                err(str(e))
                 error.writerow([
                     trial_i,
                     str(e)
