@@ -274,7 +274,10 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL
         eval_steps=eval_steps,
         save_strategy="no",
         logging_steps=100,
-        gradient_checkpointing=False,
+        gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},
+        gradient_accumulation_steps=2,
+        dataloader_drop_last=True,
         seed=SEED
     )
 
@@ -309,8 +312,11 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL
     trainer.train()
 
     del trainer
+    del model
+    del losses
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+        torch.cuda.synchronize()
 
 
 
