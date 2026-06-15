@@ -12,6 +12,9 @@ from scipy.special import kl_div
 
 from datetime import datetime
 
+from os.path import join
+from os import makedirs
+
 from sentence_transformers import (
     SentenceTransformer,
     SentenceTransformerTrainer,
@@ -342,6 +345,10 @@ if __name__ == "__main__":
     iso_dt = datetime.now().replace(microsecond=0).isoformat().replace('T', '_').replace(':', '-')
     csv_output_path = cli_args.hyperparams.replace(".csv", "") + f"_{iso_dt}.csv"
     csv_output_error_path = cli_args.hyperparams.replace(".csv", "") + f"_{iso_dt}_error.csv"
+
+    makedirs("logs", exist_ok=True)
+    csv_output_path = join("./logs", csv_output_path)
+    csv_output_error_path = join("./logs", csv_output_error_path)
 
     err("Loading datasets files...")
 
