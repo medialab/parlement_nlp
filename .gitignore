@@ -11,3 +11,4 @@ __pycache__
 training/data/*
 training/splits/*
 training/logs/*
+training/checkpoints/*
