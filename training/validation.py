@@ -3,6 +3,22 @@ import pandas as pd
 import plotly.graph_objects as go 
 from plotly.subplots import make_subplots
 
+
+def _compute_axis_range(logs, metric_col, padding_ratio=0.05):
+	values = pd.to_numeric(logs[metric_col], errors="coerce").dropna()
+	if values.empty:
+		return [0.0, 1.0]
+
+	vmin = values.min()
+	vmax = values.max()
+
+	if vmin == vmax:
+		base_padding = max(abs(vmin) * padding_ratio, 1e-6)
+		return [vmin - base_padding, vmax + base_padding]
+
+	padding = (vmax - vmin) * padding_ratio
+	return [vmin - padding, vmax + padding]
+
 def _add_metric_traces(fig, logs, metric_col, row, show_legend):
 	sorted_logs = logs.sort_values(["trial", "epoch"]).copy()
 
@@ -30,6 +46,9 @@ def _add_metric_traces(fig, logs, metric_col, row, show_legend):
 
 
 def to_figures(logs):
+	kl_range = _compute_axis_range(logs, "kl_divergence")
+	spearman_range = _compute_axis_range(logs, "spearman_cosine")
+	loss_range = _compute_axis_range(logs, "loss")
 	
 	fig = make_subplots(
 		rows=3,
@@ -51,9 +70,9 @@ def to_figures(logs):
 		height=1200,
 	)
 	fig.update_xaxes(title_text="Epoch", row=3, col=1)
-	fig.update_yaxes(title_text="kl_divergence", row=1, col=1)
-	fig.update_yaxes(title_text="spearman_cosine", row=2, col=1)
-	fig.update_yaxes(title_text="loss", row=3, col=1)
+	fig.update_yaxes(title_text="kl_divergence", range=kl_range, autorange=False, row=1, col=1)
+	fig.update_yaxes(title_text="spearman_cosine", range=spearman_range, autorange=False, row=2, col=1)
+	fig.update_yaxes(title_text="loss", range=loss_range, autorange=False, row=3, col=1)
 	
 
 

@@ -194,7 +194,7 @@ def err(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL_SAVE_STEPS):
+def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL_SAVE_STEPS, checkpointing=False):
     # === datasets ===
     train_pair_df, train_triplet_df, dev_dataset_kl, dev_dataset_spearman = datasets
 
@@ -272,7 +272,8 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL
         bf16=False,
         eval_strategy="steps",
         eval_steps=eval_steps,
-        save_strategy="no",
+        save_strategy="steps" if checkpointing else "no",
+        save_steps=eval_steps,
         logging_steps=100,
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
@@ -346,6 +347,11 @@ if __name__ == "__main__":
         default=EVAL_SAVE_STEPS,
         help="Eval save steps.",
     )
+    parser.add_argument(
+        "-c", "--checkpoints",
+        action='store_true',
+        help="Save checkpoints along training."
+    )
     cli_args = parser.parse_args()
 
     iso_dt = datetime.now().replace(microsecond=0).isoformat().replace('T', '_').replace(':', '-')
@@ -384,7 +390,7 @@ if __name__ == "__main__":
             )
 
             try:
-                trial(row, datasets, callback, batch_size=cli_args.batch_size, eval_steps=cli_args.eval_steps)
+                trial(row, datasets, callback, batch_size=cli_args.batch_size, eval_steps=cli_args.eval_steps, checkpointing=cli_args.checkpoints)
             except Exception as e:
                 err("===== ERROR - STOPPING TRIAL =====")
                 err(str(e))
