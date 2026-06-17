@@ -195,7 +195,7 @@ def err(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL_SAVE_STEPS, checkpointing=False, accumumation_steps=GRADIENT_ACCUMULATION_STEPS):
+def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL_SAVE_STEPS, checkpoints_dir=False, accumumation_steps=GRADIENT_ACCUMULATION_STEPS):
     # === datasets ===
     train_pair_df, train_triplet_df, dev_dataset_kl, dev_dataset_spearman = datasets
 
@@ -264,6 +264,7 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL
     err("Number of steps", (total // batch_size) * NUM_EPOCHS)
 
     args = SentenceTransformerTrainingArguments(
+        output_dir=join(checkpoints_dir, f"trial-{i}"),
         num_train_epochs=NUM_EPOCHS,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
@@ -273,7 +274,7 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL
         bf16=False,
         eval_strategy="steps",
         eval_steps=eval_steps,
-        save_strategy="steps" if checkpointing else "no",
+        save_strategy="steps" if checkpoints_dir else "no",
         save_steps=eval_steps,
         logging_steps=100,
         gradient_checkpointing=True,
@@ -404,7 +405,7 @@ if __name__ == "__main__":
             )
 
             try:
-                trial(row, datasets, callback, batch_size=cli_args.batch_size, eval_steps=cli_args.eval_steps, checkpointing=checkpoints_dir, accumumation_steps=cli_args.accumulation_steps)
+                trial(row, datasets, callback, batch_size=cli_args.batch_size, eval_steps=cli_args.eval_steps, checkpoints_dir=checkpoints_dir, accumumation_steps=cli_args.accumulation_steps)
             except Exception as e:
                 err("===== ERROR - STOPPING TRIAL =====")
                 err(str(e))
