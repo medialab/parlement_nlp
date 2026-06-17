@@ -173,6 +173,7 @@ DISTANCE_METRIC_TRIPLET = TripletDistanceMetric.COSINE
 BATCH_SIZE = 32
 NUM_EPOCHS = 2
 EVAL_SAVE_STEPS = 500
+GRADIENT_ACCUMULATION_STEPS = 1
 
 TRAINING_ERROR_CSV_HEADER = [
     "trial",
@@ -194,7 +195,7 @@ def err(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL_SAVE_STEPS, checkpointing=False):
+def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL_SAVE_STEPS, checkpointing=False, accumumation_steps=GRADIENT_ACCUMULATION_STEPS):
     # === datasets ===
     train_pair_df, train_triplet_df, dev_dataset_kl, dev_dataset_spearman = datasets
 
@@ -277,7 +278,7 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL
         logging_steps=100,
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
-        gradient_accumulation_steps=2,
+        gradient_accumulation_steps=accumumation_steps,
         dataloader_drop_last=True,
         seed=SEED
     )
@@ -352,6 +353,12 @@ if __name__ == "__main__":
         action='store_true',
         help="Save checkpoints along training."
     )
+    parser.add_argument(
+        "--accumulation-steps",
+        type=int,
+        default=GRADIENT_ACCUMULATION_STEPS,
+        help="Gradient accumulation steps."
+    )
     cli_args = parser.parse_args()
 
     iso_dt = datetime.now().replace(microsecond=0).isoformat().replace('T', '_').replace(':', '-')
@@ -359,8 +366,15 @@ if __name__ == "__main__":
     csv_output_error_path = cli_args.hyperparams.replace(".csv", "") + f"_{iso_dt}_error.csv"
 
     makedirs("logs", exist_ok=True)
+    
     csv_output_path = join("./logs", csv_output_path)
     csv_output_error_path = join("./logs", csv_output_error_path)
+
+    if cli_args.checkpoints:
+        checkpoints_dir = join("checkpoints", iso_dt)
+        makedirs(checkpoints_dir, exist_ok=True)
+    else:
+        checkpoints_dir = None
 
     err("Loading datasets files...")
 
@@ -390,7 +404,7 @@ if __name__ == "__main__":
             )
 
             try:
-                trial(row, datasets, callback, batch_size=cli_args.batch_size, eval_steps=cli_args.eval_steps, checkpointing=cli_args.checkpoints)
+                trial(row, datasets, callback, batch_size=cli_args.batch_size, eval_steps=cli_args.eval_steps, checkpointing=checkpoints_dir, accumumation_steps=cli_args.accumulation_steps)
             except Exception as e:
                 err("===== ERROR - STOPPING TRIAL =====")
                 err(str(e))
