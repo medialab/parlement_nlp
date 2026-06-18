@@ -265,7 +265,7 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL
     err("Number of steps", (total // batch_size) * NUM_EPOCHS)
 
     args = SentenceTransformerTrainingArguments(
-        output_dir=join(checkpoints_dir, f"trial-{i}"),
+        output_dir=join(checkpoints_dir, f"trial-{i}") if checkpoints_dir else None,
         num_train_epochs=NUM_EPOCHS,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
