@@ -5,6 +5,7 @@ import sys
 import numpy as np
 import torch
 import random
+import traceback
 
 from transformers import TrainerCallback, set_seed
 
@@ -411,7 +412,7 @@ if __name__ == "__main__":
                 err(str(e))
                 error.writerow([
                     trial_i,
-                    str(e)
+                    traceback.format_exc()
                 ])
 
 
