@@ -13,3 +13,5 @@ training/splits/*
 training/logs/*
 training/checkpoints/*
 evaluation/results/*
+evaluation/logs/*
+*.slurm.sh
