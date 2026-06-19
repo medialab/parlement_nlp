@@ -12,3 +12,4 @@ training/data/*
 training/splits/*
 training/logs/*
 training/checkpoints/*
+evaluation/results/*
