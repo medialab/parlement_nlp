@@ -14,4 +14,7 @@ training/logs/*
 training/checkpoints/*
 evaluation/results/*
 evaluation/logs/*
+evaluation/datasets/*
+evaluation/embeddings/post-train/*
+evaluation/embeddings/pre-train/*
 *.slurm.sh
