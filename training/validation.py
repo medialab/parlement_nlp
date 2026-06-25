@@ -57,7 +57,6 @@ def _add_metric_traces(fig, logs, metric_col, row, show_legend, trial_color_map)
 def to_figures(logs):
 	kl_range = _compute_axis_range(logs, "kl_divergence")
 	spearman_range = _compute_axis_range(logs, "spearman_cosine")
-	loss_range = _compute_axis_range(logs, "loss")
 	trial_color_map = _build_trial_color_map(logs)
 	
 	fig = make_subplots(
