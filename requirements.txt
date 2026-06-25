@@ -6,3 +6,5 @@ thefuzz
 tqdm
 stanza
 mteb
+matplotlib
+seaborn
