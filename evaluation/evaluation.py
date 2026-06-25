@@ -115,18 +115,27 @@ def parlement(df: pd.DataFrame, name="qwen"):
 
 
 def catie_sts(df: pd.DataFrame):
-    embeddings_a = np.array(df["embedding_sentence1"].tolist())
-    embeddings_b = np.array(df["embedding_sentence2"].tolist())
-    scores = np.array(df["score"])
-
-    pearson, spearman = calcultate_spearman_pearson(embeddings_a, embeddings_b, scores)
 
     print("==== Catie-AQ/STS ====")
-    print("Pearson correlation :", pearson)
-    print("Spearman correlation :", spearman)
+
+    metrics = {
+
+    }
+
+    for dataset, group in df.groupby("dataset"):
+        embeddings_a = np.array(group["embedding_sentence1"].tolist())
+        embeddings_b = np.array(group["embedding_sentence2"].tolist())
+        scores = np.array(group["score"])
+
+        pearson, spearman = calcultate_spearman_pearson(embeddings_a, embeddings_b, scores)
+
+        print(f"[{dataset}] pearson correlation :", pearson, "; spearman correlation :", spearman)
+
+        metrics[dataset] = (pearson, spearman)
+    
     print("")
 
-    return pearson, spearman
+    return metrics
 
 
 def sick(df: pd.DataFrame, name="qwen"):
@@ -189,12 +198,12 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if False and args.parlement:
+    if args.parlement:
         df = pd.read_csv(args.parlement, converters={"embedding_a_speech": literal_eval, "embedding_b_speech": literal_eval})
         results = parlement(df, name=args.model)
         # TODO
 
-    if False and args.sts:
+    if args.sts:
         df = pd.read_csv(args.sts, converters={"embedding_sentence1": literal_eval, "embedding_sentence2": literal_eval})
         results = catie_sts(df)
         # TODO
