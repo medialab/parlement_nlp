@@ -301,6 +301,7 @@ def trial(
         gradient_checkpointing_kwargs={"use_reentrant": False},
         gradient_accumulation_steps=accumumation_steps,
         dataloader_drop_last=True,
+        preprocess_logits_for_metrics=lambda logits, _: torch.argmax(logits, dim=-1),
         seed=SEED,
     )
 
