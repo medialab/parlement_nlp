@@ -214,6 +214,7 @@ def trial(
     params,
     datasets,
     log_callback,
+    model=MODEL_NAME,
     batch_size=BATCH_SIZE,
     eval_steps=EVAL_SAVE_STEPS,
     checkpoints_dir=False,
@@ -251,7 +252,7 @@ def trial(
     peft_config = LoraConfig(
         task_type=TaskType.FEATURE_EXTRACTION,
         inference_mode=False,
-        target_modules=MODULES[MODEL_NAME],
+        target_modules=MODULES.get(model, MODEL_NAME),
         r=lora_r,
         lora_alpha=lora_r,
         lora_dropout=0.05,
@@ -364,6 +365,11 @@ if __name__ == "__main__":
         help="Path to hyperparameters CSV file.",
     )
     parser.add_argument(
+        "--model",
+        default="Qwen/Qwen3-Embedding-0.6B",
+        help="Name or path of the SBERT model (default to Qwen/Qwen3-Embedding-0.6B)"
+    )
+    parser.add_argument(
         "--start-trial-index",
         type=int,
         default=0,
@@ -454,6 +460,7 @@ if __name__ == "__main__":
                     row,
                     datasets,
                     callback,
+                    model=cli_args.model,
                     batch_size=cli_args.batch_size,
                     eval_steps=cli_args.eval_steps,
                     checkpoints_dir=checkpoints_dir,
