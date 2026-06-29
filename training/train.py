@@ -47,16 +47,17 @@ np.random.seed(SEED)
 random.seed(SEED)
 set_seed(SEED)
 
+
 class KLDivergenceEvaluator(BaseEvaluator):
     def __init__(
         self,
         sentences1,
         sentences2,
         scores,
-        batch_size = 16,
-        name = "",
-        show_progress_bar = False,
-        write_csv = True,
+        batch_size=16,
+        name="",
+        show_progress_bar=False,
+        write_csv=True,
     ):
         super().__init__()
         self.sentences1 = sentences1
@@ -115,6 +116,7 @@ class KLDivergenceEvaluator(BaseEvaluator):
     def description(self):
         return "KL Divergence"
 
+
 class LoggingCallBack(TrainerCallback):
     def __init__(self, log_fn):
         self.log_fn = log_fn
@@ -122,33 +124,50 @@ class LoggingCallBack(TrainerCallback):
         self.last_step = 0
         self.last_loss = 0.0
         self.last_lr = 0.0
-    
+
     def on_evaluate(self, args, state, control, metrics, **kwargs):
         kl = None
-        spearman = None
-        pearson = None
+        sts_spearman = None
+        sts_pearson = None
         epoch = None
 
         for key, value in metrics.items():
             if "kl_div" in key:
                 kl = value
-            if "pearson_cosine" in key:
-                pearson = value
-            if "spearman_cosine" in key:
-                spearman = value
+            if "pearson_cosine" and "sts" in key:
+                sts_pearson = value
+            if "spearman_cosine" and "sts" in key:
+                sts_spearman = value
+            if "pearson_cosine" and "parlspear" in key:
+                parl_pearson = value
+            if "spearman_cosine" and "parlspear" in key:
+                parl_spearman = value
             if "epoch" in key:
                 epoch = value
 
         dt = datetime.now().replace(microsecond=0).isoformat()
-        
-        self.log_fn((dt, epoch, self.last_step, self.last_loss, self.last_lr, kl, spearman, pearson))
+
+        self.log_fn(
+            (
+                dt,
+                epoch,
+                self.last_step,
+                self.last_loss,
+                self.last_lr,
+                kl,
+                sts_spearman,
+                sts_pearson,
+                parl_spearman,
+                parl_pearson,
+            )
+        )
 
         return control
-    
+
     def on_step_end(self, args, state, control, **kwargs):
         self.last_step = state.global_step
         return control
-    
+
     def on_log(self, args, state, control, logs, **kwargs):
         for key, value in logs.items():
             if "loss" in key:
@@ -160,12 +179,7 @@ class LoggingCallBack(TrainerCallback):
 
 MODEL_NAME = "Qwen/Qwen3-Embedding-0.6B"
 MODULES = {
-    "Qwen/Qwen3-Embedding-0.6B": [
-        "q_proj",
-        "k_proj",
-        "v_proj",
-        "o_proj"
-    ],
+    "Qwen/Qwen3-Embedding-0.6B": ["q_proj", "k_proj", "v_proj", "o_proj"],
     "Lajavaness/sentence-camembert-large": ["query", "key", "value"],
 }
 DEVICE = "cuda"
@@ -176,10 +190,7 @@ NUM_EPOCHS = 2
 EVAL_SAVE_STEPS = 500
 GRADIENT_ACCUMULATION_STEPS = 1
 
-TRAINING_ERROR_CSV_HEADER = [
-    "trial",
-    "message"
-]
+TRAINING_ERROR_CSV_HEADER = ["trial", "message"]
 HPARAM_CSV_INPUT = "hyperparams.csv"
 HPARAM_CSV_HEADER = [
     "datetime",
@@ -188,17 +199,28 @@ HPARAM_CSV_HEADER = [
     "loss",
     "dynamic_lr",
     "kl_divergence",
-    "spearman_cosine",
-    "pearson_cosine"
+    "sts_spearman_cosine",
+    "sts_pearson_cosine",
+    "parlement_spearman_cosine",
+    "parlement_pearson_cosine",
 ]
+
 
 def err(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL_SAVE_STEPS, checkpoints_dir=False, accumumation_steps=GRADIENT_ACCUMULATION_STEPS):
+def trial(
+    params,
+    datasets,
+    log_callback,
+    batch_size=BATCH_SIZE,
+    eval_steps=EVAL_SAVE_STEPS,
+    checkpoints_dir=False,
+    accumumation_steps=GRADIENT_ACCUMULATION_STEPS,
+):
     # === datasets ===
-    train_pair_df, train_triplet_df, dev_dataset_kl, dev_dataset_spearman = datasets
+    train_pair_df, train_triplet_df, dev_dataset_kl, dev_dataset_spearman, dev_dataset_parlement_spearman = datasets
 
     # === hyper params ===
     i, lr, m_loss_siamese, m_loss_triplet, df_pair, df_triplet, lora_r = params
@@ -209,26 +231,22 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL
         float(m_loss_triplet),
         float(df_pair),
         float(df_triplet),
-        int(lora_r)
+        int(lora_r),
     )
 
     # === filtering of datasets ===
-    filtered_train_pair_df = train_pair_df[
-        train_pair_df["cosine"] >= df_pair
-    ]
+    filtered_train_pair_df = train_pair_df[train_pair_df["cosine"] >= df_pair]
 
     filtered_train_triplet_df = train_triplet_df[
         train_triplet_df["cosine"] >= df_triplet
     ]
 
-    filtered_train_pair_df = filtered_train_pair_df[
-        ["a_speech", "b_speech", "score"]
-    ]
+    filtered_train_pair_df = filtered_train_pair_df[["a_speech", "b_speech", "score"]]
     filtered_train_triplet_df = filtered_train_triplet_df[
         ["anc_speech", "pos_speech", "neg_speech"]
     ]
 
-    # === model instanciation === 
+    # === model instanciation ===
     model = SentenceTransformer(MODEL_NAME, device=DEVICE)
     peft_config = LoraConfig(
         task_type=TaskType.FEATURE_EXTRACTION,
@@ -282,10 +300,10 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL
         gradient_checkpointing_kwargs={"use_reentrant": False},
         gradient_accumulation_steps=accumumation_steps,
         dataloader_drop_last=True,
-        seed=SEED
+        seed=SEED,
     )
 
-    evaluator_spearman = EmbeddingSimilarityEvaluator(
+    evaluator_sts = EmbeddingSimilarityEvaluator(
         sentences1=dev_dataset_spearman["sentence1"].tolist(),
         sentences2=dev_dataset_spearman["sentence2"].tolist(),
         scores=dev_dataset_spearman["score"].tolist(),
@@ -293,6 +311,7 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL
         name="sts",
         show_progress_bar=True,
     )
+
 
     evaluator_kl = KLDivergenceEvaluator(
         sentences1=dev_dataset_kl["a_speech"].tolist(),
@@ -302,12 +321,23 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL
         show_progress_bar=True,
     )
 
+    evaluator_parlement_spearman = EmbeddingSimilarityEvaluator(
+        sentences1=dev_dataset_parlement_spearman["a_speech"].tolist(),
+        sentences2=dev_dataset_parlement_spearman["b_speech"].tolist(),
+        scores=dev_dataset_spearman["score"].tolist(),
+        main_similarity=SimilarityFunction.COSINE,
+        name="parlspear",
+        show_progress_bar=True,
+    )
+
     trainer = SentenceTransformerTrainer(
         args=args,
         model=model,
         train_dataset=train_dataset,
         loss=losses,
-        evaluator=SequentialEvaluator([evaluator_spearman, evaluator_kl]),
+        evaluator=SequentialEvaluator(
+            [evaluator_sts, evaluator_kl, evaluator_parlement_spearman]
+        ),
         callbacks=[
             LoggingCallBack(log_callback),
         ],
@@ -323,9 +353,7 @@ def trial(params, datasets, log_callback, batch_size=BATCH_SIZE, eval_steps=EVAL
         torch.cuda.synchronize()
 
 
-
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "hyperparams",
@@ -351,24 +379,33 @@ if __name__ == "__main__":
         help="Eval save steps.",
     )
     parser.add_argument(
-        "-c", "--checkpoints",
-        action='store_true',
-        help="Save checkpoints along training."
+        "-c",
+        "--checkpoints",
+        action="store_true",
+        help="Save checkpoints along training.",
     )
     parser.add_argument(
         "--accumulation-steps",
         type=int,
         default=GRADIENT_ACCUMULATION_STEPS,
-        help="Gradient accumulation steps."
+        help="Gradient accumulation steps.",
     )
     cli_args = parser.parse_args()
 
-    iso_dt = datetime.now().replace(microsecond=0).isoformat().replace('T', '_').replace(':', '-')
+    iso_dt = (
+        datetime.now()
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("T", "_")
+        .replace(":", "-")
+    )
     csv_output_path = cli_args.hyperparams.replace(".csv", "") + f"_{iso_dt}.csv"
-    csv_output_error_path = cli_args.hyperparams.replace(".csv", "") + f"_{iso_dt}_error.csv"
+    csv_output_error_path = (
+        cli_args.hyperparams.replace(".csv", "") + f"_{iso_dt}_error.csv"
+    )
 
     makedirs("logs", exist_ok=True)
-    
+
     csv_output_path = join("./logs", csv_output_path)
     csv_output_error_path = join("./logs", csv_output_error_path)
 
@@ -384,17 +421,20 @@ if __name__ == "__main__":
     train_triplet_df = pd.read_csv("./splits/train_triplets.csv")
     dev_dataset_kl = pd.read_csv("./splits/dev_kl.csv")
     dev_dataset_spearman = pd.read_csv("./splits/dev_spearman.csv")
+    dev_dataset_parlement_spearman = pd.read_csv("./splits/dev_parlement_spearman.csv")
 
     with (
-        casanova.enricher(cli_args.hyperparams, csv_output_path, add=HPARAM_CSV_HEADER) as enricher, 
-        casanova.writer(csv_output_error_path, TRAINING_ERROR_CSV_HEADER) as error
+        casanova.enricher(
+            cli_args.hyperparams, csv_output_path, add=HPARAM_CSV_HEADER
+        ) as enricher,
+        casanova.writer(csv_output_error_path, TRAINING_ERROR_CSV_HEADER) as error,
     ):
         for row in enricher:
             trial_i = int(row[0])
 
             if trial_i < cli_args.start_trial_index:
                 continue
-            
+
             def callback(logs):
                 enricher.writerow(row, add=logs)
 
@@ -402,17 +442,21 @@ if __name__ == "__main__":
                 train_pair_df,
                 train_triplet_df,
                 dev_dataset_kl,
-                dev_dataset_spearman
+                dev_dataset_spearman,
+                dev_dataset_parlement_spearman
             )
 
             try:
-                trial(row, datasets, callback, batch_size=cli_args.batch_size, eval_steps=cli_args.eval_steps, checkpoints_dir=checkpoints_dir, accumumation_steps=cli_args.accumulation_steps)
+                trial(
+                    row,
+                    datasets,
+                    callback,
+                    batch_size=cli_args.batch_size,
+                    eval_steps=cli_args.eval_steps,
+                    checkpoints_dir=checkpoints_dir,
+                    accumumation_steps=cli_args.accumulation_steps,
+                )
             except Exception as e:
                 err("===== ERROR - STOPPING TRIAL =====")
                 err(str(e))
-                error.writerow([
-                    trial_i,
-                    traceback.format_exc()
-                ])
-
-
+                error.writerow([trial_i, traceback.format_exc()])
