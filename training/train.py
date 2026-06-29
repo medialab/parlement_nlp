@@ -252,7 +252,7 @@ def trial(
     peft_config = LoraConfig(
         task_type=TaskType.FEATURE_EXTRACTION,
         inference_mode=False,
-        target_modules=MODULES.get(model, MODEL_NAME),
+        target_modules=MODULES.get(model, MODULES.get(MODEL_NAME)),
         r=lora_r,
         lora_alpha=lora_r,
         lora_dropout=0.05,
