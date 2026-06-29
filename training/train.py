@@ -324,7 +324,7 @@ def trial(
     evaluator_parlement_spearman = EmbeddingSimilarityEvaluator(
         sentences1=dev_dataset_parlement_spearman["a_speech"].tolist(),
         sentences2=dev_dataset_parlement_spearman["b_speech"].tolist(),
-        scores=dev_dataset_spearman["score"].tolist(),
+        scores=dev_dataset_parlement_spearman["score"].tolist(),
         main_similarity=SimilarityFunction.COSINE,
         name="parlspear",
         show_progress_bar=True,
