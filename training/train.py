@@ -253,7 +253,7 @@ def trial(
         inference_mode=False,
         target_modules=MODULES[MODEL_NAME],
         r=lora_r,
-        lora_alpha=lora_r * 2,
+        lora_alpha=lora_r,
         lora_dropout=0.05,
     )
     model.add_adapter(peft_config)
