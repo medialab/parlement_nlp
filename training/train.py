@@ -248,7 +248,7 @@ def trial(
     ]
 
     # === model instanciation ===
-    model = SentenceTransformer(MODEL_NAME, device=DEVICE)
+    model = SentenceTransformer(model, device=DEVICE)
     peft_config = LoraConfig(
         task_type=TaskType.FEATURE_EXTRACTION,
         inference_mode=False,
