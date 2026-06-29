@@ -15,15 +15,10 @@ from sklearn.metrics.pairwise import (
 
 KL_EPSILON = 1e-8
 
-MAPPING_PARLEMENT = {
-    1.0: "AGREEMENT",
-    0.0: "DISAGREEMENT"
-}
-MAPPING_SICK = {
-    1: "NEUTRAL",
-    0: "ENTAILMENT",
-    2: "CONTRADICTION"
-}
+MAPPING_PARLEMENT_KL = {1.0: "AGREEMENT", 0.0: "DISAGREEMENT"}
+MAPPING_PARLEMENT_SPEARMAN = {0.0: "DIFFERENT DEBATE", 1.0: "SAME DEBATE"}
+MAPPING_SICK = {1: "NEUTRAL", 0: "ENTAILMENT", 2: "CONTRADICTION"}
+
 
 def calculate_kl_div(a, b, scores, values=(0.0, 1.0)):
     similarities = pairwise_cos_sim(a, b).numpy()
@@ -42,8 +37,9 @@ def calculate_kl_div(a, b, scores, values=(0.0, 1.0)):
     q /= np.sum(q)
 
     kl_all = kl_div(p, q)
-    
+
     return np.nansum(kl_all)
+
 
 def calcultate_spearman_pearson(a, b, scores):
     sims = pairwise_cos_sim(a, b).numpy()
@@ -53,7 +49,9 @@ def calcultate_spearman_pearson(a, b, scores):
     return eval_pearson, eval_spearman
 
 
-def compute_stats_test(df, col_embedding_a, col_embedding_b, col_score, mapping=MAPPING_PARLEMENT):
+def compute_stats_test(
+    df, col_embedding_a, col_embedding_b, col_score, mapping=MAPPING_PARLEMENT_KL
+):
 
     stats = {
         "all": {
@@ -79,7 +77,9 @@ def compute_stats_test(df, col_embedding_a, col_embedding_b, col_score, mapping=
 
 
 def parlement(df: pd.DataFrame, name="qwen"):
-    stats = compute_stats_test(df, "embedding_a_speech", "embedding_b_speech", "score", MAPPING_PARLEMENT)
+    stats = compute_stats_test(
+        df, "embedding_a_speech", "embedding_b_speech", "score", MAPPING_PARLEMENT_KL
+    )
 
     labels = ["AGREEMENT", "DISAGREEMENT"]
 
@@ -106,7 +106,7 @@ def parlement(df: pd.DataFrame, name="qwen"):
 
     kl = calculate_kl_div(embeddings_a, embeddings_b, scores)
 
-    print("==== PARLEMENT TEST SET ====")
+    print("==== PARLEMENT TEST SET - KL DIV ====")
     print("KL-Divergence :", kl)
     print(f"Plot of distances distribution saved to ./figures/parlement_{name}.jpg")
     print("")
@@ -118,28 +118,77 @@ def catie_sts(df: pd.DataFrame):
 
     print("==== Catie-AQ/STS ====")
 
-    metrics = {
-
-    }
+    metrics = {}
 
     for dataset, group in df.groupby("dataset"):
         embeddings_a = np.array(group["embedding_sentence1"].tolist())
         embeddings_b = np.array(group["embedding_sentence2"].tolist())
         scores = np.array(group["score"])
 
-        pearson, spearman = calcultate_spearman_pearson(embeddings_a, embeddings_b, scores)
+        pearson, spearman = calcultate_spearman_pearson(
+            embeddings_a, embeddings_b, scores
+        )
 
-        print(f"[{dataset}] pearson correlation :", pearson, "; spearman correlation :", spearman)
+        print(
+            f"[{dataset}] pearson correlation :",
+            pearson,
+            "; spearman correlation :",
+            spearman,
+        )
 
         metrics[dataset] = (pearson, spearman)
-    
+
     print("")
 
     return metrics
 
 
+def spearman(df: pd.DataFrame, name="qwen"):
+    print("==== PARLEMENT TEST SET - SPEARMAN ====")
+
+    stats = compute_stats_test(
+        df,
+        "embedding_a_speech",
+        "embedding_b_speech",
+        "score",
+        MAPPING_PARLEMENT_SPEARMAN,
+    )
+
+    labels = ["DIFFERENT DEBATE", "SAME DEBATE"]
+
+    fig, axes = plt.subplots(1, 1, figsize=(10, 5), sharey=True)
+
+    for lbl in labels:
+        vals = stats["all"].get(lbl, np.array([]))
+        if vals.size:
+            sns.kdeplot(vals, ax=axes, label=lbl, fill=True, alpha=0.3)
+
+    axes.set_xlabel("Cosine similarity")
+    axes.set_ylabel("Density")
+
+    handles, legend_labels = axes.get_legend_handles_labels()
+    fig.legend(handles, legend_labels, loc="upper right", ncol=3)
+
+    plt.suptitle("Cosine similarity distributions")
+
+    plt.savefig(f"./figures/parlement_2_{name}.jpg")
+
+    embeddings_a = np.array(df["embedding_a_speech"].tolist())
+    embeddings_b = np.array(df["embedding_b_speech"].tolist())
+    scores = np.array(df["score"])
+
+    pearson, spearman = calcultate_spearman_pearson(embeddings_a, embeddings_b, scores)
+
+    print("Pearson correlation :", pearson, "; spearman correlation :", spearman)
+    print("")
+
+    return (pearson, spearman)
+
+
 def sick(df: pd.DataFrame, name="qwen"):
-    stats = compute_stats_test(df, "embedding_sentence_A", "embedding_sentence_B", "label", MAPPING_SICK)
+    stats = compute_stats_test(
+        df, "embedding_sentence_A", "embedding_sentence_B", "label", MAPPING_SICK
+    )
 
     labels = ["NEUTRAL", "ENTAILMENT", "CONTRADICTION"]
 
@@ -160,14 +209,14 @@ def sick(df: pd.DataFrame, name="qwen"):
 
     plt.savefig(f"./figures/sick_{name}.jpg")
 
-    #embeddings_a = np.array(df["embedding_sentence_A"].tolist())
-    #embeddings_b = np.array(df["embedding_sentence_B"].tolist())
-    #scores = np.array(df["label"])
+    # embeddings_a = np.array(df["embedding_sentence_A"].tolist())
+    # embeddings_b = np.array(df["embedding_sentence_B"].tolist())
+    # scores = np.array(df["label"])
 
-    #kl = calculate_kl_div(embeddings_a, embeddings_b, scores)
+    # kl = calculate_kl_div(embeddings_a, embeddings_b, scores)
 
     print("==== SICK TEST SET ====")
-    #print("KL-Divergence :", kl)
+    # print("KL-Divergence :", kl)
     print(f"Plot of distances distribution saved to ./figures/sick_{name}.jpg")
     print("")
 
@@ -192,6 +241,11 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
+        "--spearman",
+        help="CSV path for parlement spearman embeddings",
+        default=None,
+    )
+    parser.add_argument(
         "--model",
         help="Model name to evaluate",
         default="qwen",
@@ -199,16 +253,44 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.parlement:
-        df = pd.read_csv(args.parlement, converters={"embedding_a_speech": literal_eval, "embedding_b_speech": literal_eval})
+        df = pd.read_csv(
+            args.parlement,
+            converters={
+                "embedding_a_speech": literal_eval,
+                "embedding_b_speech": literal_eval,
+            },
+        )
         results = parlement(df, name=args.model)
         # TODO
 
     if args.sts:
-        df = pd.read_csv(args.sts, converters={"embedding_sentence1": literal_eval, "embedding_sentence2": literal_eval})
+        df = pd.read_csv(
+            args.sts,
+            converters={
+                "embedding_sentence1": literal_eval,
+                "embedding_sentence2": literal_eval,
+            },
+        )
         results = catie_sts(df)
         # TODO
 
     if args.sick:
-        df = pd.read_csv(args.sick, converters={"embedding_sentence_A": literal_eval, "embedding_sentence_B": literal_eval})
+        df = pd.read_csv(
+            args.sick,
+            converters={
+                "embedding_sentence_A": literal_eval,
+                "embedding_sentence_B": literal_eval,
+            },
+        )
         results = sick(df, name=args.model)
         # TODO
+
+    if args.spearman:
+        df = pd.read_csv(
+            args.spearman,
+            converters={
+                "embedding_a_speech": literal_eval,
+                "embedding_b_speech": literal_eval,
+            },
+        )
+        results = spearman(df, name=args.model)

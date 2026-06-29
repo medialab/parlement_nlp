@@ -27,6 +27,9 @@ $ xan cat rows <(xan select 'a_speech,b_speech,score' datasets/test_kl.csv| xan 
 KL-Divergence : 0.14425689691806104
 Plot of distances distribution saved to ./figures/parlement_qwen.jpg
 
+==== PARLEMENT TEST SET - SPEARMAN ====
+Pearson correlation : 0.6567117436987768 ; spearman correlation : 0.6526162859904867
+
 ==== Catie-HQ/STS ====
 [musts_french] pearson correlation : 0.8664264866643996 ; spearman correlation : 0.8773640150535658
 [opusparcus] pearson correlation : 0.6285672726839958 ; spearman correlation : 0.5832650245883015
@@ -47,6 +50,9 @@ Plot of distances distribution saved to ./figures/parlement_qwen.jpg
 ==== PARLEMENT TEST SET ====
 KL-Divergence : 1.5246605608622403
 Plot of distances distribution saved to ./figures/parlement_finetuned.jpg
+
+==== PARLEMENT TEST SET - SPEARMAN ====
+Pearson correlation : 0.1230091178625455 ; spearman correlation : 0.14272105790422226
 
 ==== Catie-AQ/STS ====
 [musts_french] pearson correlation : 0.8466024050597206 ; spearman correlation : 0.8669843881807671
