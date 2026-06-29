@@ -10,6 +10,7 @@ def main():
     )
     parser.add_argument("files", nargs="+", help="Input CSV files to concatenate")
     parser.add_argument("--chunks", default=False, action="store_true", help="Whether to divide speeches in chunks")
+    parser.add_argument("--no-vote", default=False, action="store_true", help="Whether to generate a dataset for interventions without any vote")
 
     args = parser.parse_args()
 
@@ -84,7 +85,7 @@ def main():
                 vote_type
             ) = row
 
-            if not vote_issue:
+            if not args.no_vote and not vote_issue:
                 continue
             if not name:
                 continue
@@ -99,18 +100,21 @@ def main():
             if "appels au règlement" in sub_sub_subject:
                 continue
 
-            vote_id = vote_id.split('|')[0]
+            if not args.no_vote:
+                vote_id = vote_id.split('|')[0]
 
-            vote_parts = set(vote_issue.split("|"))
+                vote_parts = set(vote_issue.split("|"))
 
-            if "POUR" in vote_parts and "CONTRE" in vote_parts:
-                continue
-            if "POUR" in vote_parts:
-                vote_issue = "POUR"
-            elif "CONTRE" in vote_parts:
-                vote_issue = "CONTRE"
+                if "POUR" in vote_parts and "CONTRE" in vote_parts:
+                    continue
+                if "POUR" in vote_parts:
+                    vote_issue = "POUR"
+                elif "CONTRE" in vote_parts:
+                    vote_issue = "CONTRE"
+                else:
+                    continue
             else:
-                continue
+                vote_issue = None
 
             speech_id = f"{vote_id}-{intervention_id}"
 

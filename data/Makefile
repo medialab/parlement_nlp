@@ -92,6 +92,9 @@ align:
 dataset:
 	uv run dataset.py ./processed/*th_aligned.csv | xan filter 'len(speech) < 40000' > ./processed/dataset.csv
 
+dataset-no-vote:
+	uv run dataset.py ./processed/*th_aligned.csv --no-vote | xan filter 'len(speech) < 40000' | xan sample 1000 --seed 42 > ./processed/dataset_no_vote.csv
+
 paires-triplets:
 	uv run paires_triplets.py ./processed/dataset.csv ./processed/paires.csv ./processed/triplets.csv
 
