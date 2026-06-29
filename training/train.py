@@ -296,6 +296,7 @@ def trial(
         save_strategy="steps" if checkpoints_dir else "no",
         save_steps=eval_steps,
         logging_steps=100,
+        eval_accumulation_steps=20,
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
         gradient_accumulation_steps=accumumation_steps,
@@ -311,7 +312,6 @@ def trial(
         name="sts",
         show_progress_bar=True,
     )
-
 
     evaluator_kl = KLDivergenceEvaluator(
         sentences1=dev_dataset_kl["a_speech"].tolist(),
@@ -348,6 +348,7 @@ def trial(
     del trainer
     del model
     del losses
+
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
