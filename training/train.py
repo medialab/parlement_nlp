@@ -311,6 +311,7 @@ def trial(
         main_similarity=SimilarityFunction.COSINE,
         name="sts",
         show_progress_bar=True,
+        batch_size=4,
     )
 
     evaluator_kl = KLDivergenceEvaluator(
@@ -328,6 +329,7 @@ def trial(
         main_similarity=SimilarityFunction.COSINE,
         name="parlspear",
         show_progress_bar=True,
+        batch_size=4,
     )
 
     trainer = SentenceTransformerTrainer(
