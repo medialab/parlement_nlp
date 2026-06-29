@@ -296,7 +296,7 @@ def trial(
         save_strategy="steps" if checkpoints_dir else "no",
         save_steps=eval_steps,
         logging_steps=100,
-        eval_accumulation_steps=20,
+        eval_accumulation_steps=2,
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
         gradient_accumulation_steps=accumumation_steps,
