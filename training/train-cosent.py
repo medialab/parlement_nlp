@@ -23,9 +23,7 @@ from sentence_transformers import (
 )
 from sentence_transformers.util import pairwise_cos_sim
 from sentence_transformers.sentence_transformer.losses import (
-    ContrastiveLoss,
     SiameseDistanceMetric,
-    TripletLoss,
     TripletDistanceMetric,
     CoSENTLoss
 )

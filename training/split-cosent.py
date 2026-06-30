@@ -47,7 +47,7 @@ train_texts = list(set(
     + train["b_speech"].tolist()
 ))
 
-train_embeddings_array = model.encode(train_texts, batch_size=16, show_progress_bar=True)
+train_embeddings_array = model.encode(train_texts, batch_size=8, show_progress_bar=True)
 train_embeddings = {text: embedding for text, embedding in zip(train_texts, train_embeddings_array)}
 
 embeddings_a = torch.from_numpy(
