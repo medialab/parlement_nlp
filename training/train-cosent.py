@@ -10,6 +10,7 @@ import traceback
 from transformers import TrainerCallback, set_seed
 
 from scipy.special import kl_div
+from scipy.stats import pearsonr, spearmanr
 
 from datetime import datetime
 
@@ -80,6 +81,8 @@ class KLDivergenceEvaluator(BaseEvaluator):
         similarities = pairwise_cos_sim(embeddings1, embeddings2).detach().cpu().numpy()
         scores = np.array(self.scores)
 
+        # === KL DIV ===
+
         sim_0 = similarities[scores == 0.5]
         sim_1 = similarities[scores == 1.0]
         bins = 100
@@ -96,6 +99,14 @@ class KLDivergenceEvaluator(BaseEvaluator):
         kl = np.nansum(kl_all)
 
         metrics = {"kl_div_cosine": kl}
+
+        # === PEARSON / SPEARMAN
+
+        eval_pearson, _ = pearsonr(similarities, scores)
+        eval_spearman, _ = spearmanr(similarities, scores)
+
+        metrics["pearson_cosine"] = eval_pearson
+        metrics["spearman_cosine"] = eval_spearman
 
         metrics = self.prefix_name_to_metrics(metrics, self.name)
         self.store_metrics_in_model_card_data(model, metrics, epoch, steps)
@@ -137,9 +148,9 @@ class LoggingCallBack(TrainerCallback):
                 sts_pearson = value
             if "spearman_cosine" and "sts" in key:
                 sts_spearman = value
-            if "pearson_cosine" and "parlspear" in key:
+            if "pearson_cosine" and "val" in key:
                 parl_pearson = value
-            if "spearman_cosine" and "parlspear" in key:
+            if "spearman_cosine" and "val" in key:
                 parl_spearman = value
             if "epoch" in key:
                 epoch = value
@@ -299,23 +310,13 @@ def trial(
         show_progress_bar=True,
     )
 
-    evaluator_parlement_spearman = EmbeddingSimilarityEvaluator(
-        sentences1=dev_df["a_speech"].tolist(),
-        sentences2=dev_df["b_speech"].tolist(),
-        scores=dev_df["score"].tolist(),
-        main_similarity=SimilarityFunction.COSINE,
-        name="parlspear",
-        show_progress_bar=True,
-        batch_size=batch_size,
-    )
-
     trainer = SentenceTransformerTrainer(
         args=args,
         model=model,
         train_dataset=train,
         loss=loss,
         evaluator=SequentialEvaluator(
-            [evaluator_sts, evaluator_kl, evaluator_parlement_spearman]
+            [evaluator_sts, evaluator_kl]
         ),
         callbacks=[
             LoggingCallBack(log_callback),
