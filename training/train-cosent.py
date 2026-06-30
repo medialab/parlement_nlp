@@ -308,6 +308,7 @@ def trial(
         scores=dev_df["score"].tolist(),
         name="val",
         show_progress_bar=True,
+        batch_size=batch_size,
     )
 
     trainer = SentenceTransformerTrainer(
