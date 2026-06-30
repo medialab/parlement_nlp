@@ -250,14 +250,14 @@ def trial(
     )
     model.add_adapter(peft_config)
 
-    train = Dataset.from_pandas(filtered_train_df)
+    train = Dataset.from_pandas(filtered_train_df, preserve_index=False)
     loss = CoSENTLoss(model, scale=scale_loss)
 
     total = len(filtered_train_df)
 
     err("==== NEW TRIAL ====")
     err("Number of items :", total)
-    err("Number of steps", (total // batch_size) * NUM_EPOCHS)
+    err("Number of steps", ((total // batch_size) // accumumation_steps) * NUM_EPOCHS)
 
     args = SentenceTransformerTrainingArguments(
         output_dir=join(checkpoints_dir, f"trial-{i}") if checkpoints_dir else None,
