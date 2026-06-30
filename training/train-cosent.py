@@ -251,7 +251,7 @@ def trial(
     model.add_adapter(peft_config)
 
     train = Dataset.from_pandas(filtered_train_df)
-    loss = CoSENTLoss(model)
+    loss = CoSENTLoss(model, scale=scale_loss)
 
     total = len(filtered_train_df)
 
