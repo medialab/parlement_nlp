@@ -50,12 +50,14 @@ set_seed(SEED)
 
 # Cf. https://github.com/yqhu/profiler-workshop/blob/c8d4a7c30a61cc7b909d89f88f5fd36b70c55769/hf_training_trainer_prof.py
 class ProfCallback(TrainerCallback):
-    def __init__(self, prof):
-        self.prof = prof
+    def __init__(self):
+        #self.prof = prof
+        pass
 
     def on_step_end(self, args, state, control, **kwargs):
-        print("STEP END")
-        self.prof.step()
+        #print("STEP END")
+        #self.prof.step()
+        torch.cuda.memory._dump_snapshot(f"trace/trace_{state.global_step}.pkl")
 
 
 
@@ -248,6 +250,7 @@ def trial(
 ):
     
     torch.set_default_device("cuda")
+    torch.cuda.memory._record_memory_history(max_entries=100000)
 
     # === datasets ===
     train_df, dev_df, dev_spearman = datasets
@@ -333,6 +336,7 @@ def trial(
         batch_size=1,
     )
 
+    """
     with torch.profiler.profile(
         activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
         record_shapes=True,
@@ -340,22 +344,23 @@ def trial(
         schedule=torch.profiler.schedule(wait=0, warmup=0, active=1),
         on_trace_ready=trace_handler,
     ) as prof:
-        
-        trainer = SentenceTransformerTrainer(
-            args=args,
-            model=model,
-            train_dataset=train,
-            loss=loss,
-            evaluator=SequentialEvaluator(
-                [evaluator_sts, evaluator_kl]
-            ),
-            callbacks=[
-                ProfCallback(prof),
-                LoggingCallBack(log_callback),
-            ],
-        )
+    """
 
-        trainer.train()
+    trainer = SentenceTransformerTrainer(
+        args=args,
+        model=model,
+        train_dataset=train,
+        loss=loss,
+        evaluator=SequentialEvaluator(
+            [evaluator_sts, evaluator_kl]
+        ),
+        callbacks=[
+            ProfCallback(),
+            LoggingCallBack(log_callback),
+        ],
+    )
+
+    trainer.train()
 
     del trainer
     del model
