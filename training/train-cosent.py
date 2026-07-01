@@ -334,7 +334,6 @@ def trial(
         profile_memory=True,
         schedule=torch.profiler.schedule(wait=0, warmup=0, active=1),
         on_trace_ready=trace_handler,
-        acc_events=True,
     ) as prof:
         
         trainer = SentenceTransformerTrainer(
