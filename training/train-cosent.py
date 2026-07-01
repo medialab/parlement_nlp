@@ -206,31 +206,14 @@ class VirtualBatchCoSENTLoss(torch.nn.Module):
         self.scale = scale
         self.similarity_fct = similarity_fct
         self.virtual_batch_size = max(1, int(virtual_batch_size))
-        self.buffered_sentence_features = []
-        self.buffered_labels = []
+        self.buffer_a = {}
+        self.buffer_b = {}
+        self.buffer_labels = []
 
     def reset(self):
-        self.buffered_sentence_features.clear()
-        self.buffered_labels.clear()
-
-    def _clone_sentence_features_to_cpu(self, sentence_features):
-        return [
-            {
-                key: value.detach().cpu()
-                for key, value in sentence_feature.items()
-            }
-            for sentence_feature in sentence_features
-        ]
-
-    def _merge_buffered_features(self, index, device):
-        keys = self.buffered_sentence_features[0][index].keys()
-        return {
-            key: torch.cat(
-                [features[index][key] for features in self.buffered_sentence_features],
-                dim=0,
-            ).to(device)
-            for key in keys
-        }
+        self.buffer_a.clear()
+        self.buffer_b.clear()
+        self.buffer_labels.clear()
 
     def compute_loss_from_embeddings(self, embeddings, labels):
         scores = self.similarity_fct(embeddings[0], embeddings[1])
@@ -245,16 +228,32 @@ class VirtualBatchCoSENTLoss(torch.nn.Module):
         return torch.logsumexp(scores, dim=0)
 
     def forward(self, sentence_features, labels):
-        self.buffered_sentence_features.append(self._clone_sentence_features_to_cpu(sentence_features))
-        self.buffered_labels.append(labels.detach().view(-1).cpu())
+        features_a, features_b = sentence_features
+        for key, value in features_a.items():
+            if key not in self.buffer_a:
+                self.buffer_a[key] = []
+            self.buffer_a[key].append(value.detach().cpu())
 
-        if len(self.buffered_labels) < self.virtual_batch_size:
+        for key, value in features_b.items():
+            if key not in self.buffer_b:
+                self.buffer_b[key] = []
+            self.buffer_b[key].append(value.detach().cpu())
+
+        self.buffer_labels.append(labels.detach().view(-1).cpu())
+
+        if len(self.buffer_labels) < self.virtual_batch_size:
             return next(self.model.parameters()).sum() * 0.0
 
         device = labels.device
-        merged_sentence_features_1 = self._merge_buffered_features(0, device)
-        merged_sentence_features_2 = self._merge_buffered_features(1, device)
-        merged_labels = torch.cat(self.buffered_labels, dim=0).to(device)
+        merged_sentence_features_1 = {
+            key: torch.cat(chunks, dim=0).to(device)
+            for key, chunks in self.buffer_a.items()
+        }
+        merged_sentence_features_2 = {
+            key: torch.cat(chunks, dim=0).to(device)
+            for key, chunks in self.buffer_b.items()
+        }
+        merged_labels = torch.cat(self.buffer_labels, dim=0).to(device)
 
         embeddings = [
             self.model(merged_sentence_features_1)["sentence_embedding"],
