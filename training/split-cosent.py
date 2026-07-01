@@ -78,6 +78,6 @@ train["cosine"] = pair_sim.cpu().numpy()
 
 # ==== SAVING ====
 
-train.to_csv("./splits/train_cosent.csv")
-dev.to_csv("./splits/dev_cosent.csv")
-test.to_csv("./splits/test_cosent.csv")
+train.to_csv("./splits/train_cosent.csv", index=None)
+dev.to_csv("./splits/dev_cosent.csv", index=None)
+test.to_csv("./splits/test_cosent.csv", index=None)
