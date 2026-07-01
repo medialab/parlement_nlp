@@ -305,6 +305,7 @@ def trial(
         gradient_accumulation_steps=accumumation_steps,
         dataloader_drop_last=True,
         seed=SEED,
+        use_cache=False,
     )
 
     evaluator_sts = EmbeddingSimilarityEvaluator(
@@ -344,6 +345,7 @@ def trial(
         record_shapes=True,
         profile_memory=True,
         on_trace_ready=trace_handler,
+        acc_events=True,
     ) as prof:
         trainer.add_callback(ProfCallback(prof))
         trainer.train()
