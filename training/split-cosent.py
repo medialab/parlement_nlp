@@ -25,7 +25,7 @@ dataset["b_tokens"] = dataset["b_speech"].apply(lambda a: len(tokenizer(a)["inpu
 
 dataset["tokens"] = dataset[["a_tokens", "b_tokens"]].max(axis=1)
 
-dataset = dataset[dataset["tokens"] < 4096]
+dataset = dataset[dataset["tokens"] < 2048]
 
 del dataset["a_tokens"]
 del dataset["b_tokens"]
