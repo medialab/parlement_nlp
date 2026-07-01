@@ -246,6 +246,9 @@ def trial(
     checkpoints_dir=False,
     accumumation_steps=GRADIENT_ACCUMULATION_STEPS,
 ):
+    
+    torch.set_default_device("cuda")
+
     # === datasets ===
     train_df, dev_df, dev_spearman = datasets
 
@@ -306,10 +309,10 @@ def trial(
         gradient_accumulation_steps=accumumation_steps,
         dataloader_drop_last=True,
         seed=SEED,
-        use_cache=False,
+        use_cache=False
     )
 
-    print(args.place_model_on_device, args.device)
+    print(model.device, args.place_model_on_device, args.device)
 
     evaluator_sts = EmbeddingSimilarityEvaluator(
         sentences1=dev_spearman["sentence1"].tolist(),
