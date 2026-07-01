@@ -7,6 +7,7 @@ import torch
 import random
 import traceback
 import os
+from collections import deque
 
 from transformers import TrainerCallback, set_seed
 
@@ -149,20 +150,18 @@ class LoggingCallBack(TrainerCallback):
         kl = None
         sts_spearman = None
         sts_pearson = None
-        parl_spearman = None
-        parl_pearson = None
         epoch = None
 
         for key, value in metrics.items():
             if "kl_div" in key:
                 kl = value
-            if "pearson_cosine" in key and "sts" in key:
+            if "pearson_cosine" and "sts" in key:
                 sts_pearson = value
-            if "spearman_cosine" in key and "sts" in key:
+            if "spearman_cosine" and "sts" in key:
                 sts_spearman = value
-            if "pearson_cosine" in key and "val" in key:
+            if "pearson_cosine" and "val" in key:
                 parl_pearson = value
-            if "spearman_cosine" in key and "val" in key:
+            if "spearman_cosine" and "val" in key:
                 parl_spearman = value
             if "epoch" in key:
                 epoch = value
@@ -199,89 +198,55 @@ class LoggingCallBack(TrainerCallback):
         return control
 
 
-class VirtualBatchCoSENTLoss(torch.nn.Module):
-    def __init__(self, model, scale=20.0, similarity_fct=pairwise_cos_sim, virtual_batch_size=8):
+class MemoryCoSENTLoss(torch.nn.Module):
+    def __init__(self, model, scale=20.0, similarity_fct=pairwise_cos_sim, memory_size=64):
         super().__init__()
         self.model = model
         self.scale = scale
         self.similarity_fct = similarity_fct
-        self.virtual_batch_size = max(1, int(virtual_batch_size))
-        self.buffer_a = {}
-        self.buffer_b = {}
-        self.buffer_labels = []
+        self.memory_size = memory_size
+        self.memory_embeddings_a = deque(maxlen=memory_size)
+        self.memory_embeddings_b = deque(maxlen=memory_size)
+        self.memory_labels = deque(maxlen=memory_size)
 
-    def reset(self):
-        self.buffer_a.clear()
-        self.buffer_b.clear()
-        self.buffer_labels.clear()
+    def forward(self, sentence_features, labels):
+        current_a = self.model(sentence_features[0])["sentence_embedding"]
+        current_b = self.model(sentence_features[1])["sentence_embedding"]
+        current_labels = labels.view(-1)
 
-    def compute_loss_from_embeddings(self, embeddings, labels):
-        scores = self.similarity_fct(embeddings[0], embeddings[1])
+        if len(self.memory_labels) == 0:
+            self._save_in_memory(current_a, current_b, current_labels)
+            # Keep a graph-connected zero on the very first step.
+            return (current_a.sum() + current_b.sum()) * 0.0
+
+        memory_a = torch.cat(list(self.memory_embeddings_a), dim=0).to(current_a.device)
+        memory_b = torch.cat(list(self.memory_embeddings_b), dim=0).to(current_b.device)
+        memory_labels = torch.cat(list(self.memory_labels), dim=0).to(current_labels.device)
+
+        all_a = torch.cat([memory_a, current_a], dim=0)
+        all_b = torch.cat([memory_b, current_b], dim=0)
+        all_labels = torch.cat([memory_labels, current_labels], dim=0)
+
+        scores = self.similarity_fct(all_a, all_b)
         scores = scores * self.scale
         scores = scores[:, None] - scores[None, :]
 
-        label_matrix = labels[:, None] < labels[None, :]
+        label_matrix = all_labels[:, None] < all_labels[None, :]
         label_matrix = label_matrix.float()
+
         scores = scores - (1 - label_matrix) * 1e12
 
-        scores = torch.cat((torch.zeros(1, device=scores.device), scores.view(-1)), dim=0)
-        return torch.logsumexp(scores, dim=0)
+        scores = torch.cat((torch.zeros(1).to(scores.device), scores.view(-1)), dim=0)
+        loss = torch.logsumexp(scores, dim=0)
 
-    def forward(self, sentence_features, labels):
-        features_a, features_b = sentence_features
-        for key, value in features_a.items():
-            if not torch.is_tensor(value):
-                continue
-            if key not in self.buffer_a:
-                self.buffer_a[key] = []
-            self.buffer_a[key].append(value.detach().cpu())
+        self._save_in_memory(current_a, current_b, current_labels)
 
-        for key, value in features_b.items():
-            if not torch.is_tensor(value):
-                continue
-            if key not in self.buffer_b:
-                self.buffer_b[key] = []
-            self.buffer_b[key].append(value.detach().cpu())
-
-        self.buffer_labels.append(labels.detach().view(-1).cpu())
-
-        if len(self.buffer_labels) < self.virtual_batch_size:
-            return next(self.model.parameters()).sum() * 0.0
-
-        device = labels.device
-        merged_sentence_features_1 = {
-            key: torch.cat(chunks, dim=0).to(device)
-            for key, chunks in self.buffer_a.items()
-        }
-        merged_sentence_features_2 = {
-            key: torch.cat(chunks, dim=0).to(device)
-            for key, chunks in self.buffer_b.items()
-        }
-        merged_labels = torch.cat(self.buffer_labels, dim=0).to(device)
-
-        embeddings = [
-            self.model(merged_sentence_features_1)["sentence_embedding"],
-            self.model(merged_sentence_features_2)["sentence_embedding"],
-        ]
-        loss = self.compute_loss_from_embeddings(embeddings, merged_labels)
-
-        # Trainer normalizes by gradient_accumulation_steps, so rescale once here.
-        loss = loss * self.virtual_batch_size
-        self.reset()
         return loss
 
-
-class VirtualBatchLossResetCallback(TrainerCallback):
-    def __init__(self, loss):
-        self.loss = loss
-
-    def on_epoch_begin(self, args, state, control, **kwargs):
-        self.loss.reset()
-        return control
-
-    def on_train_end(self, args, state, control, **kwargs):
-        self.loss.reset()
-        return control
+    def _save_in_memory(self, embeddings_a, embeddings_b, labels):
+        self.memory_embeddings_a.append(embeddings_a.detach().cpu())
+        self.memory_embeddings_b.append(embeddings_b.detach().cpu())
+        self.memory_labels.append(labels.detach().cpu())
 
 
 
@@ -368,22 +333,18 @@ def trial(
     model.add_adapter(peft_config)
 
     train = Dataset.from_pandas(filtered_train_df, preserve_index=False)
-    if batch_size != 1:
-        err("VirtualBatchCoSENTLoss expects micro-batch size 1. Overriding per_device_train_batch_size to 1.")
-
-    virtual_batch_size = max(1, int(accumumation_steps))
-    loss = VirtualBatchCoSENTLoss(model, scale=scale_loss, virtual_batch_size=virtual_batch_size)
+    loss = MemoryCoSENTLoss(model, scale=scale_loss, memory_size=accumumation_steps)
 
     total = len(filtered_train_df)
 
     err("==== NEW TRIAL ====")
     err("Number of items :", total)
-    err("Number of steps", ((total // 1) // virtual_batch_size) * NUM_EPOCHS)
+    err("Number of steps", ((total // batch_size) // accumumation_steps) * NUM_EPOCHS)
 
     args = SentenceTransformerTrainingArguments(
         output_dir=join(checkpoints_dir, f"trial-{i}") if checkpoints_dir else None,
         num_train_epochs=NUM_EPOCHS,
-        per_device_train_batch_size=1,
+        per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         learning_rate=lr,
         warmup_steps=0.1,
@@ -443,7 +404,6 @@ def trial(
             [evaluator_sts, evaluator_kl]
         ),
         callbacks=[
-            VirtualBatchLossResetCallback(loss),
             LoggingCallBack(log_callback),
         ],
     )
