@@ -54,6 +54,7 @@ class ProfCallback(TrainerCallback):
         self.prof = prof
 
     def on_step_end(self, args, state, control, **kwargs):
+        print("STEP END")
         self.prof.step()
 
 
@@ -327,19 +328,6 @@ def trial(
         batch_size=1,
     )
 
-    trainer = SentenceTransformerTrainer(
-        args=args,
-        model=model,
-        train_dataset=train,
-        loss=loss,
-        evaluator=SequentialEvaluator(
-            [evaluator_sts, evaluator_kl]
-        ),
-        callbacks=[
-            LoggingCallBack(log_callback),
-        ],
-    )
-
     with torch.profiler.profile(
         activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
         record_shapes=True,
@@ -347,7 +335,21 @@ def trial(
         on_trace_ready=trace_handler,
         acc_events=True,
     ) as prof:
-        trainer.add_callback(ProfCallback(prof))
+        
+        trainer = SentenceTransformerTrainer(
+            args=args,
+            model=model,
+            train_dataset=train,
+            loss=loss,
+            evaluator=SequentialEvaluator(
+                [evaluator_sts, evaluator_kl]
+            ),
+            callbacks=[
+                ProfCallback(prof),
+                LoggingCallBack(log_callback),
+            ],
+        )
+
         trainer.train()
 
     del trainer
