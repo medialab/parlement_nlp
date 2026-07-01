@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import random
 import traceback
+import os
 
 from transformers import TrainerCallback, set_seed
 
@@ -46,6 +47,15 @@ torch.cuda.manual_seed_all(SEED)
 np.random.seed(SEED)
 random.seed(SEED)
 set_seed(SEED)
+
+# Cf. https://github.com/yqhu/profiler-workshop/blob/c8d4a7c30a61cc7b909d89f88f5fd36b70c55769/hf_training_trainer_prof.py
+class ProfCallback(TrainerCallback):
+    def __init__(self, prof):
+        self.prof = prof
+
+    def on_step_end(self, args, state, control, **kwargs):
+        self.prof.step()
+
 
 
 class KLDivergenceEvaluator(BaseEvaluator):
@@ -219,6 +229,11 @@ HPARAM_CSV_HEADER = [
 def err(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
+def trace_handler(p):
+    output = p.key_averages().table(sort_by="self_cuda_memory_usage", row_limit=10)
+    print(output)
+    os.makedirs("trace", exist_ok=True)
+    p.export_chrome_trace("./trace/trace_" + str(p.step_num) + ".json")
 
 def trial(
     params,
@@ -324,7 +339,14 @@ def trial(
         ],
     )
 
-    trainer.train()
+    with torch.profiler.profile(
+        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+        record_shapes=True,
+        profile_memory=True,
+        on_trace_ready=trace_handler,
+    ) as prof:
+        trainer.add_callback(ProfCallback(prof))
+        trainer.train()
 
     del trainer
     del model
