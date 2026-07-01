@@ -230,11 +230,15 @@ class VirtualBatchCoSENTLoss(torch.nn.Module):
     def forward(self, sentence_features, labels):
         features_a, features_b = sentence_features
         for key, value in features_a.items():
+            if not torch.is_tensor(value):
+                continue
             if key not in self.buffer_a:
                 self.buffer_a[key] = []
             self.buffer_a[key].append(value.detach().cpu())
 
         for key, value in features_b.items():
+            if not torch.is_tensor(value):
+                continue
             if key not in self.buffer_b:
                 self.buffer_b[key] = []
             self.buffer_b[key].append(value.detach().cpu())
