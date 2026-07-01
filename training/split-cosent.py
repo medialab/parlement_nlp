@@ -2,8 +2,9 @@ from sklearn.model_selection import train_test_split
 
 from sentence_transformers.util import pairwise_cos_sim
 from sentence_transformers import (
-    SentenceTransformer,
+    SentenceTransformer
 )
+from transformers import AutoTokenizer
 
 import torch
 import numpy as np
@@ -15,6 +16,19 @@ SEED = 24
 dataset = pd.read_csv("./data/paires-cosent.csv", dtype={"agreement": "float64"})
 dataset = dataset[["a_speech", "b_speech", "agreement"]]
 dataset = dataset.rename(columns={"agreement": "score"})
+
+# ==== FILTERING TOKENS < 4096 ====
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-Embedding-0.6B")
+dataset["a_tokens"] = dataset["a_speech"].apply(lambda a: len(tokenizer(a)["input_ids"]))
+dataset["b_tokens"] = dataset["b_speech"].apply(lambda a: len(tokenizer(a)["input_ids"]))
+
+dataset["tokens"] = dataset[["a_tokens", "b_tokens"]].max(axis=1)
+
+dataset = dataset[dataset["tokens"] < 4096]
+
+del dataset["a_tokens"]
+del dataset["b_tokens"]
 
 # splitting
 
