@@ -332,6 +332,7 @@ def trial(
         activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
         record_shapes=True,
         profile_memory=True,
+        schedule=torch.profiler.schedule(active=5),
         on_trace_ready=trace_handler,
         acc_events=True,
     ) as prof:
