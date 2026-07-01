@@ -309,6 +309,8 @@ def trial(
         use_cache=False,
     )
 
+    print(args.place_model_on_device, args.device)
+
     evaluator_sts = EmbeddingSimilarityEvaluator(
         sentences1=dev_spearman["sentence1"].tolist(),
         sentences2=dev_spearman["sentence2"].tolist(),
