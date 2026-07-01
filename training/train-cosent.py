@@ -299,7 +299,7 @@ def trial(
         main_similarity=SimilarityFunction.COSINE,
         name="sts",
         show_progress_bar=True,
-        batch_size=batch_size,
+        batch_size=1,
     )
 
     evaluator_kl = KLDivergenceEvaluator(
@@ -308,7 +308,7 @@ def trial(
         scores=dev_df["score"].tolist(),
         name="val",
         show_progress_bar=True,
-        batch_size=batch_size,
+        batch_size=1,
     )
 
     trainer = SentenceTransformerTrainer(
