@@ -7,6 +7,7 @@ import torch
 import random
 import traceback
 import os
+from collections import deque
 
 from transformers import TrainerCallback, set_seed
 
@@ -27,7 +28,6 @@ from sentence_transformers.util import pairwise_cos_sim
 from sentence_transformers.sentence_transformer.losses import (
     SiameseDistanceMetric,
     TripletDistanceMetric,
-    CoSENTLoss
 )
 from sentence_transformers.sentence_transformer.evaluation import (
     BaseEvaluator,
@@ -58,8 +58,6 @@ class ProfCallback(TrainerCallback):
         #print("STEP END")
         #self.prof.step()
         torch.cuda.memory._dump_snapshot(f"trace/trace_{state.global_step}.pkl")
-
-
 
 class KLDivergenceEvaluator(BaseEvaluator):
     def __init__(
@@ -200,6 +198,59 @@ class LoggingCallBack(TrainerCallback):
         return control
 
 
+class MemoryCoSENTLoss(torch.nn.Module):
+    def __init__(self, model, scale=20.0, similarity_fct=pairwise_cos_sim, memory_size=64):
+        super().__init__()
+        self.model = model
+        self.scale = scale
+        self.similarity_fct = similarity_fct
+        self.memory_size = memory_size
+        self.memory_embeddings_a = deque(maxlen=memory_size)
+        self.memory_embeddings_b = deque(maxlen=memory_size)
+        self.memory_labels = deque(maxlen=memory_size)
+
+    def forward(self, sentence_features, labels):
+        current_a = self.model(sentence_features[0])["sentence_embedding"]
+        current_b = self.model(sentence_features[1])["sentence_embedding"]
+        current_labels = labels.view(-1)
+
+        if len(self.memory_labels) == 0:
+            self._save_in_memory(current_a, current_b, current_labels)
+            # Keep a graph-connected zero on the very first step.
+            return (current_a.sum() + current_b.sum()) * 0.0
+
+        memory_a = torch.cat(list(self.memory_embeddings_a), dim=0).to(current_a.device)
+        memory_b = torch.cat(list(self.memory_embeddings_b), dim=0).to(current_b.device)
+        memory_labels = torch.cat(list(self.memory_labels), dim=0).to(current_labels.device)
+
+        all_a = torch.cat([memory_a, current_a], dim=0)
+        all_b = torch.cat([memory_b, current_b], dim=0)
+        all_labels = torch.cat([memory_labels, current_labels], dim=0)
+
+        scores = self.similarity_fct(all_a, all_b)
+        scores = scores * self.scale
+        scores = scores[:, None] - scores[None, :]
+
+        label_matrix = all_labels[:, None] < all_labels[None, :]
+        label_matrix = label_matrix.float()
+
+        scores = scores - (1 - label_matrix) * 1e12
+
+        scores = torch.cat((torch.zeros(1).to(scores.device), scores.view(-1)), dim=0)
+        loss = torch.logsumexp(scores, dim=0)
+
+        self._save_in_memory(current_a, current_b, current_labels)
+
+        return loss
+
+    def _save_in_memory(self, embeddings_a, embeddings_b, labels):
+        self.memory_embeddings_a.append(embeddings_a.detach().cpu())
+        self.memory_embeddings_b.append(embeddings_b.detach().cpu())
+        self.memory_labels.append(labels.detach().cpu())
+
+
+
+
 MODEL_NAME = "Qwen/Qwen3-Embedding-0.6B"
 MODULES = {
     "Qwen/Qwen3-Embedding-0.6B": ["q_proj", "k_proj", "v_proj", "o_proj"],
@@ -249,9 +300,7 @@ def trial(
     accumumation_steps=GRADIENT_ACCUMULATION_STEPS,
 ):
     
-    torch.set_default_device("cuda")
-    torch.cuda.memory._record_memory_history(max_entries=100000)
-
+  
     # === datasets ===
     train_df, dev_df, dev_spearman = datasets
 
@@ -284,7 +333,7 @@ def trial(
     model.add_adapter(peft_config)
 
     train = Dataset.from_pandas(filtered_train_df, preserve_index=False)
-    loss = CoSENTLoss(model, scale=scale_loss)
+    loss = MemoryCoSENTLoss(model, scale=scale_loss, memory_size=accumumation_steps)
 
     total = len(filtered_train_df)
 
@@ -355,7 +404,6 @@ def trial(
             [evaluator_sts, evaluator_kl]
         ),
         callbacks=[
-            ProfCallback(),
             LoggingCallBack(log_callback),
         ],
     )
@@ -369,7 +417,6 @@ def trial(
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
