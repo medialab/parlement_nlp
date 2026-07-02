@@ -19,6 +19,8 @@ from datetime import datetime
 from os.path import join
 from os import makedirs
 
+from accelerate import prepare_pippy
+
 from sentence_transformers import (
     SentenceTransformer,
     SentenceTransformerTrainer,
@@ -27,7 +29,7 @@ from sentence_transformers import (
 from sentence_transformers.util import pairwise_cos_sim
 from sentence_transformers.sentence_transformer.losses import (
     SiameseDistanceMetric,
-    TripletDistanceMetric,
+    TripletDistanceMetric
 )
 from sentence_transformers.sentence_transformer.evaluation import (
     BaseEvaluator,
@@ -331,6 +333,8 @@ def trial(
         lora_dropout=0.05,
     )
     model.add_adapter(peft_config)
+
+    model = prepare_pippy(model)
 
     train = Dataset.from_pandas(filtered_train_df, preserve_index=False)
     loss = MemoryCoSENTLoss(model, scale=scale_loss, memory_size=accumumation_steps)
