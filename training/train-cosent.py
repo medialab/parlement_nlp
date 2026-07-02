@@ -29,7 +29,8 @@ from sentence_transformers import (
 from sentence_transformers.util import pairwise_cos_sim
 from sentence_transformers.sentence_transformer.losses import (
     SiameseDistanceMetric,
-    TripletDistanceMetric
+    TripletDistanceMetric,
+    CoSENTLoss
 )
 from sentence_transformers.sentence_transformer.evaluation import (
     BaseEvaluator,
@@ -251,8 +252,6 @@ class MemoryCoSENTLoss(torch.nn.Module):
         self.memory_labels.append(labels.detach().cpu())
 
 
-
-
 MODEL_NAME = "Qwen/Qwen3-Embedding-0.6B"
 MODULES = {
     "Qwen/Qwen3-Embedding-0.6B": ["q_proj", "k_proj", "v_proj", "o_proj"],
@@ -337,7 +336,7 @@ def trial(
     model = prepare_pippy(model)
 
     train = Dataset.from_pandas(filtered_train_df, preserve_index=False)
-    loss = MemoryCoSENTLoss(model, scale=scale_loss, memory_size=accumumation_steps)
+    loss = CoSENTLoss(model, scale=scale_loss)
 
     total = len(filtered_train_df)
 
