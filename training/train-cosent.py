@@ -331,9 +331,8 @@ def trial(
         lora_alpha=lora_r,
         lora_dropout=0.05,
     )
-    model.add_adapter(peft_config)
-
     model = prepare_pippy(model)
+    model.add_adapter(peft_config)
 
     train = Dataset.from_pandas(filtered_train_df, preserve_index=False)
     loss = CoSENTLoss(model, scale=scale_loss)
