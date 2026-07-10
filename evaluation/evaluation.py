@@ -8,9 +8,7 @@ from scipy.stats import pearsonr, spearmanr
 from sentence_transformers.util import pairwise_cos_sim
 from ast import literal_eval
 from sklearn.metrics.pairwise import (
-    cosine_distances,
     paired_cosine_distances,
-    cosine_similarity,
 )
 
 KL_EPSILON = 1e-8
@@ -171,7 +169,7 @@ def spearman(df: pd.DataFrame, name="qwen"):
 
     plt.suptitle("Cosine similarity distributions")
 
-    plt.savefig(f"./figures/parlement_2_{name}.jpg")
+    plt.savefig(f"./figures/parlement_spearman_{name}.jpg")
 
     embeddings_a = np.array(df["embedding_a_speech"].tolist())
     embeddings_b = np.array(df["embedding_b_speech"].tolist())
