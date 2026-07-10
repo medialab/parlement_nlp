@@ -17,4 +17,9 @@ evaluation/logs/*
 evaluation/datasets/*
 evaluation/embeddings/post-train/*
 evaluation/embeddings/pre-train/*
+application/model*
+application/corpus/*
+application/data/*
+evaluation/embeddings/post-train*/*
+evaluation/embeddings/pre-train*/*
 *.slurm.sh
