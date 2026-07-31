@@ -54,7 +54,7 @@ def parse_vote(path):
             ("ABSTENTION", abstentions)
         ]
         for label, speakers in count:
-            if type(speakers) == dict:
+            if isinstance(speakers, dict):
                 speakers = [speakers]
 
             for speaker in speakers:
@@ -98,8 +98,6 @@ def filtre(scrutin):
     if "proposition" not in titre.lower():
         return False
         
-    #print(scrutin["synthese"])
-     # Changer pour prendre en compte ABSTENTION
     part_pour = scrutin["summary"]["POUR"] / (scrutin["summary"]["POUR"] + scrutin["summary"]["CONTRE"])
     part_contre = scrutin["summary"]["CONTRE"] / (scrutin["summary"]["POUR"] + scrutin["summary"]["CONTRE"])
 

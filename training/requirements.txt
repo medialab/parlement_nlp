@@ -1,0 +1,10 @@
+sentence-transformers==5.4.1
+casanova
+pandas
+datasets
+numpy
+scipy
+peft
+accelerate
+torch
+plotly

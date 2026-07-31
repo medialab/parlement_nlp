@@ -1,0 +1,4 @@
+trial,lr,loss_scale,data_filter_pair,data_filter_triplet,lora_r
+50,2e-05,20,0.4,0.4,16
+51,2e-05,10,0.4,0.4,16
+52,2e-05,5,0.4,0.4,16

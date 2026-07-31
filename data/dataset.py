@@ -1,76 +1,209 @@
-import json
-import casanova
+
 import argparse
+import sys
+import casanova
 
-parser = argparse.ArgumentParser(description="Parse debate data into CSV")
-parser.add_argument("--input", help="Path to input JSON file")
-parser.add_argument("--output", help="Path to output CSV file")
-args = parser.parse_args()
 
-DEBATS_JSON = args.input
-OUTPUT_PATH = args.output
+def main():
+    parser = argparse.ArgumentParser(
+        description="Concatenate multiple CSV files into a single dataframe"
+    )
+    parser.add_argument("files", nargs="+", help="Input CSV files to concatenate")
+    parser.add_argument("--chunks", default=False, action="store_true", help="Whether to divide speeches in chunks")
+    parser.add_argument("--no-vote", default=False, action="store_true", help="Whether to generate a dataset for interventions without any vote")
 
-HEADERS = [
-    "speech_id",
-    "debate_id",
-    "amendment_author_name",
-    "amendment_author_group",
-    "amendment_content",
-    "amendment_summary",
-    "speech_date",
-    "speaker_name",
-    "speaker_group",
-    "speaker_government",
-    "label",
-    "speech"
-]
+    args = parser.parse_args()
 
-with open(DEBATS_JSON) as source:
-    data = json.load(source)
+    concat = not args.chunks
 
-with casanova.writer(OUTPUT_PATH, HEADERS) as writer:
-    for debat in data:
-        debate_id = debat["vote_id"]
-        speech_date = debat["date"]
-        amendment_author_name = debat["author_name"]
-        amendment_author_group = debat["author_group"]
-        amendment_content = debat["content"]
-        amendment_summary = debat["summary"]
+    header = [
+        "speech_id",
+        "debate_id",
+        "speech_date",
+        "speech_subject_1",
+        "speech_subject_2",
+        "speech_subject_3",
+        "speaker_name",
+        "speaker_group",
+        "speaker_government",
+        "vote",
+        "source",
+        "speech",
+        "amendments",
+        "amendments_precised"
+    ]
 
-        subject = debat["subject"]
+    rows = []
+    for file in args.files:
+        with casanova.reader(file) as reader:
+            for row in reader:
+                rows.append(row)
 
-        for tour in debat["turns"]:
-            speaker_name = tour["speaker"]["name"]
-            speaker_party = tour["speaker"]["group_harmonized"]
-            speaker_gouv = tour["speaker"]["government"]
+    
 
-            if not speaker_gouv and not speaker_party:
+    with casanova.writer(sys.stdout, header) as writer:
+        (
+            t_speech_id,
+            t_debate_id,
+            t_speech_date,
+            t_subject,
+            t_s_subject,
+            t_ss_subject,
+            t_speaker_name,
+            t_speaker_group,
+            t_speaker_government,
+            t_label,
+            t_type,
+            t_speech,
+            t_amd,
+            t_amd_p
+        ) = None, None, None, None, None, None, None, None, None, None, None, [], None, None
+        has_current = False
+        results = []
+        for row in rows:
+            (
+                intervention_id,
+                debate_number,
+                debate_ref,
+                date,
+                moment,
+                subject,
+                sub_subject,
+                name,
+                sexe,
+                group,
+                last_group,
+                function,
+                code,
+                intervention,
+                sub_sub_subject,
+                amendments,
+                amendments_precise,
+                is_government,
+                vote_id,
+                vote_issue,
+                vote_type
+            ) = row
+
+            if not args.no_vote and not vote_issue:
+                continue
+            if not name:
                 continue
 
-            if speaker_gouv and not speaker_party:
-                speaker_party = "GOUV"
+            if code != "PAROLE_GENERIQUE":
+                continue
+            if function == "président":
+                continue
 
-            label = tour["vote"]
-            
-            # On skip les abstention et l'absence de vote
-            if not label: continue
-            if label == "ABSTENTION": continue
+            if "appel au règlement" in sub_sub_subject:
+                continue
+            if "appels au règlement" in sub_sub_subject:
+                continue
 
-            speech = ' '.join([parole["speech"] for parole in tour["speech"]])
-            speech_id = tour["speech"][0]["speech_id"]
-           
+            if not args.no_vote:
+                vote_id = vote_id.split('|')[0]
 
-            writer.writerow([
-                speech_id,
-                debate_id,
-                amendment_author_name,
-                amendment_author_group,
-                amendment_content,
-                amendment_summary,
-                speech_date,
-                speaker_name,
-                speaker_party,
-                speaker_gouv,
-                label,
-                speech
+                vote_parts = set(vote_issue.split("|"))
+
+                if "POUR" in vote_parts and "CONTRE" in vote_parts:
+                    continue
+                if "POUR" in vote_parts:
+                    vote_issue = "POUR"
+                elif "CONTRE" in vote_parts:
+                    vote_issue = "CONTRE"
+                else:
+                    continue
+            else:
+                vote_issue = None
+
+            speech_id = f"{vote_id}-{intervention_id}"
+
+            if concat:
+                if (t_debate_id, t_speech_date, t_subject, t_s_subject, t_ss_subject, t_speaker_name, t_speaker_group, t_speaker_government) != (vote_id, date, subject, sub_subject, sub_sub_subject, name, group, is_government):
+                    if has_current:
+                        final_speech = ' '.join(t_speech)
+
+                        results.append([
+                            t_speech_id,
+                            t_debate_id,
+                            t_speech_date,
+                            t_subject,
+                            t_s_subject,
+                            t_ss_subject,
+                            t_speaker_name,
+                            t_speaker_group,
+                            t_speaker_government,
+                            t_label,
+                            t_type,
+                            final_speech,
+                            t_amd,
+                            t_amd_p
+                        ])
+
+                    (
+                        t_speech_id,
+                        t_debate_id,
+                        t_speech_date,
+                        t_subject,
+                        t_s_subject,
+                        t_ss_subject,
+                        t_speaker_name,
+                        t_speaker_group,
+                        t_speaker_government,
+                        t_label,
+                        t_type,
+                        t_speech,
+                        t_amd,
+                        t_amd_p
+                    ) = speech_id, vote_id, date, subject, sub_subject, sub_sub_subject, name, group, is_government, vote_issue, vote_type, [], amendments, amendments_precise
+                    has_current = True
+
+                    if intervention:
+                        t_speech.append(intervention)
+                else:
+                    if not t_speech or t_speech[-1] != intervention:
+                        t_speech.append(intervention)
+                    
+            else:
+                results.append([
+                    speech_id,
+                    vote_id,
+                    date,
+                    subject,
+                    sub_subject,
+                    sub_sub_subject,
+                    name,
+                    group,
+                    is_government,
+                    vote_issue,
+                    vote_type,
+                    intervention,
+                    amendments,
+                    amendments_precise
+                ])
+
+        if concat and has_current:
+            final_speech = ' '.join(t_speech)
+            results.append([
+                t_speech_id,
+                t_debate_id,
+                t_speech_date,
+                t_subject,
+                t_s_subject,
+                t_ss_subject,
+                t_speaker_name,
+                t_speaker_group,
+                t_speaker_government,
+                t_label,
+                t_type,
+                final_speech,
+                t_amd,
+                t_amd_p
             ])
+            
+        writer.writerows(results)
+
+
+
+if __name__ == "__main__":
+    main()

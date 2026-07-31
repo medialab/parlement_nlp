@@ -1,0 +1,3 @@
+trial,lr,margin_loss_siamese,margin_loss_triplet,data_filter_pair,data_filter_triplet,lora_r
+16,2e-05,0.6,0.2,0.4,0.4,8
+4,2e-05,0.6,0.4,0.4,0.4,8

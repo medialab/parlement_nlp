@@ -1,13 +1,14 @@
 import json
-import tqdm
 
 from collections import Counter, defaultdict
-from pathlib import Path
 
 class Votes:
     def __init__(self, json_path):
-        with open(json_path) as source:
-            self.db = json.load(source)
+        if isinstance(json_path, str):
+            with open(json_path) as source:
+                self.db = json.load(source)
+        else:
+            self.db = json.load(json_path)
 
         # Scrutin par groupes
         for vote in self.db.values():
@@ -18,7 +19,7 @@ class Votes:
         counter = defaultdict(Counter)
         for a, b in tuples:
             counter[a][b] += 1
-        
+
         vote_dict = {}
         for key, value in counter.items():
             vote_dict[key] = value.most_common(1)[0][0]
@@ -28,16 +29,16 @@ class Votes:
     def get(self, id):
         return self.db[id]
 
-    def filter(self, condition):
+    def filter(self, condition, *args, **kwargs):
         for value in self.db.values():
-            if condition(value):
+            if condition(value, *args, **kwargs):
                 yield value
 
     def from_name(self, id, name):
         for obj in self.db[id]["votes"]:
             if obj["name"] == name:
                 return obj["vote"]
-        
+
         return None
 
     def from_group(self, id, group):
