@@ -23,3 +23,4 @@ application/data/*
 evaluation/embeddings/post-train*/*
 evaluation/embeddings/pre-train*/*
 *.slurm.sh
+application/.chroma
