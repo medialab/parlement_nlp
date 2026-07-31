@@ -8,11 +8,20 @@ from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunct
 chroma_client = chromadb.Client()
 
 
-def upsert_in_batches(collection, db, batch_size):
+def upsert_in_batches(
+    collection,
+    db,
+    batch_size,
+    column_text="amendment_summary",
+    column_embedding="embedding_amendment_summary",
+    column_category = "author_group",
+    column_stance = "score"
+):
     ids = db["ids"].tolist()
-    documents = db["amendment_summary"].tolist()
-    embeddings = db["embedding_amendment_summary"].tolist()
-    groups = db["author_group"].tolist()
+    documents = db[column_text].tolist()
+    embeddings = db[column_embedding].tolist()
+    groups = db[column_category].tolist()
+    stances = db[column_stance].tolist()
 
     for start in range(0, len(db), batch_size):
         end = min(start + batch_size, len(db))
@@ -20,7 +29,7 @@ def upsert_in_batches(collection, db, batch_size):
             ids=ids[start:end],
             documents=documents[start:end],
             embeddings=embeddings[start:end],
-            metadatas=[{"group": g} for g in groups],
+            metadatas=[{"group": g, "stance": s} for g, s in zip(groups[start:end], stances[start:end])],
         )
 
 
@@ -40,21 +49,23 @@ def find_top_k(collection_pre, collection_post, queries, k):
         pre_docs = results_pre["documents"][0]
         pre_distances = results_pre["distances"][0]
         pre_groups = [m["group"] for m in results_pre["metadatas"][0]]
+        pre_stances = [m["stance"] for m in results_pre["metadatas"][0]]
 
         post_ids = results_post["ids"][0]
         post_docs = results_post["documents"][0]
         post_distances = results_post["distances"][0]
         post_groups = [m["group"] for m in results_post["metadatas"][0]]
+        post_stances = [m["stance"] for m in results_post["metadatas"][0]]
 
-        pre_rank = { i:r for i, r in zip(ids, range(len(pre_ids))) }
+        pre_rank = {i: r for i, r in zip(ids, range(len(pre_ids)))}
 
-        for i, (id, doc, dist, group) in enumerate(zip(post_ids, post_docs, post_distances, post_groups)):
+        for i, (id, doc, dist, group, stance) in enumerate(
+            zip(post_ids, post_docs, post_distances, post_groups, post_stances)
+        ):
             rank_origin = pre_rank[id]
             evol = rank_origin - i
             evol = f"+{evol}" if evol > 0 else evol
-            print(f"\t[#{rank_origin} -> #{i}; group=\"{group}\"; evolution={evol}]")
-
-        
+            print(f'\t[#{rank_origin} -> #{i}; group="{group}"; evolution={evol}; position={stance}]')
 
 
 if __name__ == "__main__":
@@ -75,6 +86,10 @@ if __name__ == "__main__":
         default=5,
         help="Number of closest speeches to print for each query",
     )
+    parser.add_argument("--column-text", help="Column of text")
+    parser.add_argument("--column-embedding", help="Column of embedding")
+    parser.add_argument("--column-category", help="Column of category")
+    parser.add_argument("--column-stance", help="Column of stance")
     parser.add_argument(
         "--model-pre",
         help="Model to use",
@@ -88,14 +103,14 @@ if __name__ == "__main__":
     df_pre = pd.read_csv(
         args.csv_pre_train,
         converters={
-            "embedding_amendment_summary": literal_eval,
+            args.column_embedding: literal_eval,
         },
     )
 
     df_post = pd.read_csv(
         args.csv_post_train,
         converters={
-            "embedding_amendment_summary": literal_eval,
+            args.column_embedding: literal_eval,
         },
     )
 
@@ -121,8 +136,12 @@ if __name__ == "__main__":
     max_batch_size = chroma_client.get_max_batch_size()
     safe_batch_size = max(1, min(1000, max_batch_size))
 
-    upsert_in_batches(collection=collection_finetuned, db=df_pre, batch_size=safe_batch_size)
-    upsert_in_batches(collection=collection_qwen, db=df_post, batch_size=safe_batch_size)
+    upsert_in_batches(
+        collection=collection_finetuned, db=df_pre, batch_size=safe_batch_size, column_embedding=args.column_embedding, column_text=args.column_text, column_category=args.column_category, column_stance=args.column_stance
+    )
+    upsert_in_batches(
+        collection=collection_qwen, db=df_post, batch_size=safe_batch_size, column_embedding=args.column_embedding, column_text=args.column_text, column_category=args.column_category, column_stance=args.column_stance
+    )
 
     while True:
         query = [input("Query : ")]
