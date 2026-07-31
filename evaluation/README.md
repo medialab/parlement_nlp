@@ -15,7 +15,7 @@ Réunie des paires de textes issus de débats différents (score 0.0) et des tex
 Commande xan :
 
 ```bash
-$ xan cat rows <(xan select 'a_speech,b_speech,score' datasets/test_kl.csv| xan sample 500 --seed 42 | xan transform score '1.0') datasets/inter_sample.csv | xan shuffle --seed 42 | xan view > datasets/test_spearman.csv
+$ xan cat rows <(xan select 'a_speech,b_speech,score' datasets/test_kl.csv| xan sample 500 --seed 42 | xan transform score '1.0') datasets/inter_sample.csv | xan shuffle --seed 42 | xan view > datasets/test_parlement_spearman.csv
 ```
 
 ## Results

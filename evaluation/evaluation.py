@@ -14,7 +14,7 @@ from sklearn.metrics.pairwise import (
 KL_EPSILON = 1e-8
 
 MAPPING_PARLEMENT_KL = {1.0: "AGREEMENT", 0.0: "DISAGREEMENT"}
-MAPPING_PARLEMENT_SPEARMAN = {0.0: "DIFFERENT DEBATE", 1.0: "SAME DEBATE"}
+MAPPING_PARLEMENT_SPEARMAN = {0.0: "DIFFERENT DEBATE", 0.5: "SAME DEBATE - DISAGREEMENT", 1.0: "SAME DEBATE - AGREEMENT"}
 MAPPING_SICK = {1: "NEUTRAL", 0: "ENTAILMENT", 2: "CONTRADICTION"}
 
 
@@ -152,7 +152,7 @@ def spearman(df: pd.DataFrame, name="qwen"):
         MAPPING_PARLEMENT_SPEARMAN,
     )
 
-    labels = ["DIFFERENT DEBATE", "SAME DEBATE"]
+    labels = ["DIFFERENT DEBATE", "SAME DEBATE - DISAGREEMENT", "SAME DEBATE - AGREEMENT"]
 
     fig, axes = plt.subplots(1, 1, figsize=(10, 5), sharey=True)
 
@@ -173,11 +173,17 @@ def spearman(df: pd.DataFrame, name="qwen"):
 
     embeddings_a = np.array(df["embedding_a_speech"].tolist())
     embeddings_b = np.array(df["embedding_b_speech"].tolist())
+
+    #harmonized_score = df["score"].apply(lambda a: 0.0 if a == 0.0 else 1.0)
+
     scores = np.array(df["score"])
+
+    kl = calculate_kl_div(embeddings_a, embeddings_b, scores, values=(0.5, 1.0))
 
     pearson, spearman = calcultate_spearman_pearson(embeddings_a, embeddings_b, scores)
 
     print("Pearson correlation :", pearson, "; spearman correlation :", spearman)
+    print("KL-Divergence (between agreeing/disagreeing distribution) :", kl)
     print("")
 
     return (pearson, spearman)
